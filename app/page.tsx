@@ -48,6 +48,8 @@ export default function HomePage() {
   const [backendUrl, setBackendUrl] = useState(BACKEND_URL);
   const [activeEditorTab, setActiveEditorTab] = useState<'code' | 'settings' | 'aiconfig'>('code');
   const [settingsTrigger, setSettingsTrigger] = useState(0);
+  const [modernFileTree, setModernFileTree] = useState<FileNode[]>([]);
+  const [modernFolderBasename, setModernFolderBasename] = useState<string>('');
 
   // Resizable panel states (Theia-style)
   const [sidebarWidth, setSidebarWidth] = useState(260);
@@ -145,6 +147,32 @@ export default function HomePage() {
     }
   }, []);
 
+  const fetchModernTree = useCallback(async (sid: string) => {
+    try {
+      const res = await fetch(`${backendUrl}/api/migrate/tree?sessionId=${sid}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setModernFileTree(data.fileTree || []);
+      if (data.modernPath) {
+        const clean = data.modernPath.replace(/\\/g, '/');
+        const parts = clean.split('/');
+        const folderName = parts[parts.length - 1] || data.modernPath;
+        setModernFolderBasename(folderName);
+      }
+    } catch {
+      setModernFileTree([]);
+    }
+  }, [backendUrl]);
+
+  useEffect(() => {
+    if (sessionId) {
+      fetchModernTree(sessionId);
+    } else {
+      setModernFileTree([]);
+      setModernFolderBasename('');
+    }
+  }, [sessionId, fetchModernTree]);
+
   const sseRef = useRef<EventSource | null>(null);
   const hasProject = fileTree.length > 0;
   const isRunning = ['scanning', 'planning', 'pseudocode', 'migrating', 'building', 'validating', 'testing'].includes(status);
@@ -215,6 +243,7 @@ export default function HomePage() {
       setFileTree(data.fileTree);
       setDetectedStack(data.detectedStack);
       setStatus('idle');
+      fetchModernTree(data.sessionId);
 
       addLog(`✅ Scanned ${data.detectedStack.fileCount} files`, 'success');
       addLog(`Detected: ${data.detectedStack.language} / ${data.detectedStack.framework} / ${data.detectedStack.database}`, 'info');
@@ -223,7 +252,7 @@ export default function HomePage() {
       addLog(`Scan failed: ${message}`, 'error');
       setStatus('error');
     }
-  }, [addLog, backendUrl]);
+  }, [addLog, backendUrl, fetchModernTree]);
 
   // ── Select File → Load Content ─────────────────────────────────────────
   const handleSelectFile = useCallback(async (path: string) => {
@@ -247,6 +276,9 @@ export default function HomePage() {
     switch (event.type) {
       case 'log':
         addLog(event.data.message as string, (event.data.level as LogEntry['level']) ?? 'info', event.data.phase as string);
+        if (sessionId && event.data.message && ((event.data.message as string).includes('successfully written to') || (event.data.message as string).includes('Fallback content') || (event.data.message as string).includes('custom local folder'))) {
+          fetchModernTree(sessionId);
+        }
         break;
       case 'progress':
         setProgress(event.data.percent as number ?? 0);
@@ -257,15 +289,18 @@ export default function HomePage() {
         setPhases(prev => prev.map(p =>
           p.id === event.data.phaseId ? { ...p, status: event.data.status as MigrationPhase['status'] } : p
         ));
+        if (sessionId) fetchModernTree(sessionId);
         break;
       case 'file_migrated':
         setFileTree(prev => markMigrated(prev, event.data.path as string));
+        if (sessionId) fetchModernTree(sessionId);
         break;
       case 'complete':
         setStatus('complete');
         setProgress(100);
         sseRef.current?.close();
         addLog('🎉 Migration complete!', 'success');
+        if (sessionId) fetchModernTree(sessionId);
         break;
       case 'error':
         setStatus('error');
@@ -275,7 +310,7 @@ export default function HomePage() {
       case 'heartbeat':
         break;
     }
-  }, [addLog]);
+  }, [addLog, sessionId, fetchModernTree]);
 
   // ── Start Migration ────────────────────────────────────────────────────
   const handleStart = useCallback(async (target: TargetStack) => {
@@ -491,6 +526,8 @@ export default function HomePage() {
         {sidebarOpen && activeTab === 'explorer' && (
           <ExplorerPanel
             fileTree={fileTree}
+            modernFileTree={modernFileTree}
+            modernFolderBasename={modernFolderBasename}
             selectedFile={selectedFile}
             onSelectFile={handleSelectFile}
             onUpload={handleUpload}
