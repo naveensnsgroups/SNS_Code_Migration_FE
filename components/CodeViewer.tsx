@@ -104,7 +104,6 @@ export default function CodeViewer({ legacyCode, modernCode, legacyFile, modernF
         {modernFile && modernCode && (
           <div className="editor-tab active" style={{ borderTopColor: 'var(--text-success)' }}>
             <span className="editor-tab__icon" style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-              <Sparkles size={11} className="text-success" />
               {getFileIcon(modernFile)}
             </span>
             <span className="editor-tab__name">{modernFile.split('/').pop()}</span>
