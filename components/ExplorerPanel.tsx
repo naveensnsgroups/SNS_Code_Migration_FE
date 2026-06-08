@@ -6,8 +6,6 @@ import { getFileIcon, getFolderIcon } from '../utils/labelProvider';
 
 interface Props {
   fileTree: FileNode[];
-  modernFileTree?: FileNode[];
-  modernFolderBasename?: string;
   selectedFile: string | null;
   onSelectFile: (path: string, content?: string) => void;
   onUpload: (files: FileList | File[], paths?: string[]) => void;
@@ -85,7 +83,7 @@ function FileItem({
   );
 }
 
-export default function ExplorerPanel({ fileTree, modernFileTree, modernFolderBasename, selectedFile, onSelectFile, onUpload, hasProject, width, planPhaseDone }: Props) {
+export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, onUpload, hasProject, width, planPhaseDone }: Props) {
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     const items = e.dataTransfer.items;
@@ -198,20 +196,29 @@ export default function ExplorerPanel({ fileTree, modernFileTree, modernFolderBa
                 ))}
               </>
             )}
-            {modernFileTree && modernFileTree.length > 0 && (
+            {planPhaseDone && (
               <div style={{ marginTop: '16px' }}>
-                <div className="file-tree__section-label" style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--text-success)' }}>
-                  <Sparkles size={14} className="text-success" style={{ color: 'var(--text-success)' }} /> Modernised Project ({modernFolderBasename || 'output'})
+                <div className="file-tree__section-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {getFolderIcon(false)} Stage-1 Reports
                 </div>
-                {modernFileTree.map((node) => (
-                  <FileItem
-                    key={node.path}
-                    node={node}
-                    depth={0}
-                    selectedFile={selectedFile}
-                    onSelect={onSelectFile}
-                  />
-                ))}
+                <div
+                  className={`file-tree__item file-tree__item--file ${selectedFile === 'Stage1_Analysis.md' ? 'selected' : ''}`}
+                  style={{ paddingLeft: '4px', cursor: 'pointer' }}
+                  onClick={() => onSelectFile('Stage1_Analysis.md')}
+                >
+                  <span className="file-tree__toggle-placeholder" />
+                  <span className="file-tree__item-icon">{getFileIcon('Stage1_Analysis.md')}</span>
+                  <span className="file-tree__item-name">Stage1_Analysis.md</span>
+                </div>
+                <div
+                  className={`file-tree__item file-tree__item--file ${selectedFile === 'migration-plan.md' ? 'selected' : ''}`}
+                  style={{ paddingLeft: '4px', cursor: 'pointer' }}
+                  onClick={() => onSelectFile('migration-plan.md')}
+                >
+                  <span className="file-tree__toggle-placeholder" />
+                  <span className="file-tree__item-icon">{getFileIcon('migration-plan.md')}</span>
+                  <span className="file-tree__item-name">migration-plan.md</span>
+                </div>
               </div>
             )}
           </div>

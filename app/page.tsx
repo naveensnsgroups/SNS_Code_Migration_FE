@@ -526,8 +526,6 @@ export default function HomePage() {
         {sidebarOpen && activeTab === 'explorer' && (
           <ExplorerPanel
             fileTree={fileTree}
-            modernFileTree={modernFileTree}
-            modernFolderBasename={modernFolderBasename}
             selectedFile={selectedFile}
             onSelectFile={handleSelectFile}
             onUpload={handleUpload}
