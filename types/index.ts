@@ -108,35 +108,17 @@ export interface ApiError {
   code: string;
 }
 
-export const AI_PROVIDERS: Record<AIProvider, { label: string; models: string[] }> = {
-  anthropic: {
-    label: 'Anthropic Claude',
-    models: ['claude-sonnet-4-6', 'claude-sonnet-4-5', 'claude-opus-4-6', 'claude-opus-4-5'],
-  },
-  openai: {
-    label: 'OpenAI GPT',
-    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
-  },
-  google: {
-    label: 'Google Gemini',
-    models: ['gemini-3.1-pro-preview', 'gemini-3-flash-preview'],
-  },
-  grok: {
-    label: 'Grok (xAI)',
-    models: ['grok-2', 'grok-2-mini'],
-  },
-  groq: {
-    label: 'Groq',
-    models: ['llama3-70b-8192', 'llama3-8b-8192', 'mixtral-8x7b-32768'],
-  },
-  openrouter: {
-    label: 'OpenRouter',
-    models: ['meta-llama/llama-3-70b-instruct', 'deepseek/deepseek-chat', 'mistralai/mixtral-8x7b-instruct'],
-  },
-  huggingface: {
-    label: 'Hugging Face',
-    models: ['meta-llama/Meta-Llama-3-70B-Instruct', 'mistralai/Mixtral-8x7B-Instruct-v0.1'],
-  },
+// AI_PROVIDERS: provider labels only.
+// Model lists are fully user-managed in Settings — no hardcoded defaults here.
+// Each provider's available models are stored in localStorage by the user.
+export const AI_PROVIDERS: Record<AIProvider, { label: string }> = {
+  anthropic:   { label: 'Anthropic Claude' },
+  openai:      { label: 'OpenAI GPT' },
+  google:      { label: 'Google Gemini' },
+  grok:        { label: 'Grok (xAI)' },
+  groq:        { label: 'Groq' },
+  openrouter:  { label: 'OpenRouter' },
+  huggingface: { label: 'Hugging Face' },
 };
 
 export const MIGRATION_PHASES: MigrationPhase[] = [

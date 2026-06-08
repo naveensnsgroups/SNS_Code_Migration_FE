@@ -179,6 +179,8 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [newModelInputs, setNewModelInputs] = useState<Record<string, string>>({});
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  // Tracks the active selected model per provider: { google: 'gemini-2.0-flash', ... }
+  const [selectedModels, setSelectedModels] = useState<Record<string, string>>({});
 
   // Load settings from localStorage
   useEffect(() => {
@@ -196,6 +198,17 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
       }
     });
     setSettings(loadedSettings);
+
+    // Load selected model per provider from localStorage
+    const providers = ['anthropic', 'openai', 'google', 'grok', 'groq', 'openrouter', 'huggingface'];
+    const sel: Record<string, string> = {};
+    for (const p of providers) {
+      const raw = localStorage.getItem(`setting_${p}_selected_model`);
+      if (raw) {
+        try { sel[p] = JSON.parse(raw); } catch { sel[p] = raw; }
+      }
+    }
+    setSelectedModels(sel);
   }, [settingsTrigger]);
 
   // Filter settings based on query
@@ -391,48 +404,104 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
                   </div>
                 )}
 
-                {/* 4. LIST TYPE */}
-                {field.type === 'list' && (
-                  <div className="settings-list-editor" style={{ maxWidth: '480px' }}>
-                    {/* List Items */}
-                    <div className="settings-list-items">
-                      {(settings[field.id] || []).map((val: string, index: number) => (
-                        <div key={index} className="settings-list-item-row">
-                          <span className="list-item-value-text">{val}</span>
-                          <button
-                            type="button"
-                            className="list-item-delete-btn"
-                            onClick={() => handleRemoveValue(field.id, index)}
-                            title="Remove Model"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                {/* 4. LIST TYPE — model list with click-to-select active model */}
+                {field.type === 'list' && (() => {
+                  // Derive provider name from field id: 'google_models' → 'google'
+                  const provider = field.id.replace('_models', '');
+                  const activeModel = selectedModels[provider] ?? '';
 
-                    {/* Add Item row */}
-                    <div className="settings-list-add-row">
-                      <input
-                        type="text"
-                        className="form-input-premium settings-list-add-input"
-                        placeholder="Add Value..."
-                        value={newModelInputs[field.id] || ''}
-                        onChange={(e) => setNewModelInputs({ ...newModelInputs, [field.id]: e.target.value })}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleAddValue(field.id);
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="settings-list-add-btn"
-                        onClick={() => handleAddValue(field.id)}
-                      >
-                        <Plus size={14} />
-                      </button>
+                  const handleSelectModel = (model: string) => {
+                    const key = `setting_${provider}_selected_model`;
+                    localStorage.setItem(key, JSON.stringify(model));
+                    setSelectedModels(prev => ({ ...prev, [provider]: model }));
+                    if (onSettingsSaved) onSettingsSaved();
+                    setSaveStatus(`Active model → ${model}`);
+                    setTimeout(() => setSaveStatus(null), 2000);
+                  };
+
+                  return (
+                    <div className="settings-list-editor" style={{ maxWidth: '480px' }}>
+                      {/* Active model indicator */}
+                      {activeModel && (
+                        <div style={{
+                          fontSize: '11px', color: 'var(--accent-green)',
+                          marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px'
+                        }}>
+                          <Check size={11} />
+                          <span>Active: <strong style={{ fontFamily: 'var(--font-mono)' }}>{activeModel}</strong></span>
+                        </div>
+                      )}
+                      {!activeModel && (
+                        <div style={{
+                          fontSize: '11px', color: 'var(--text-warning)',
+                          marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px'
+                        }}>
+                          <HelpCircle size={11} />
+                          <span>Click a model below to select it as active</span>
+                        </div>
+                      )}
+
+                      {/* List Items */}
+                      <div className="settings-list-items">
+                        {(settings[field.id] || []).map((val: string, index: number) => {
+                          const isActive = val === activeModel;
+                          return (
+                            <div
+                              key={index}
+                              className="settings-list-item-row"
+                              style={{
+                                cursor: 'pointer',
+                                background: isActive ? 'rgba(0,200,100,0.08)' : undefined,
+                                border: isActive ? '1px solid rgba(0,200,100,0.25)' : undefined,
+                                borderRadius: isActive ? '4px' : undefined,
+                              }}
+                              onClick={() => handleSelectModel(val)}
+                              title={`Click to set "${val}" as active model`}
+                            >
+                              {/* Active indicator dot */}
+                              <span style={{
+                                width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0,
+                                background: isActive ? 'var(--accent-green)' : 'var(--border-color)',
+                                display: 'inline-block', marginRight: '8px',
+                              }} />
+                              <span className="list-item-value-text" style={{ flex: 1, fontWeight: isActive ? 600 : 400 }}>
+                                {val}
+                              </span>
+                              {isActive && <Check size={12} style={{ color: 'var(--accent-green)', flexShrink: 0 }} />}
+                              <button
+                                type="button"
+                                className="list-item-delete-btn"
+                                onClick={(e) => { e.stopPropagation(); handleRemoveValue(field.id, index); }}
+                                title="Remove Model"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Add Item row */}
+                      <div className="settings-list-add-row">
+                        <input
+                          type="text"
+                          className="form-input-premium settings-list-add-input"
+                          placeholder="Add Value..."
+                          value={newModelInputs[field.id] || ''}
+                          onChange={(e) => setNewModelInputs({ ...newModelInputs, [field.id]: e.target.value })}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleAddValue(field.id); }}
+                        />
+                        <button
+                          type="button"
+                          className="settings-list-add-btn"
+                          onClick={() => handleAddValue(field.id)}
+                        >
+                          <Plus size={14} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* 5. SELECT TYPE */}
                 {field.type === 'select' && (

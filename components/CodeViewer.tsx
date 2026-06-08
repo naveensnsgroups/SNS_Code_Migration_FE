@@ -86,15 +86,12 @@ export default function CodeViewer({ legacyCode, modernCode, legacyFile, modernF
         {legacyFile && legacyCode && hasValidLegacy && (
           <div className="editor-tab active">
             <span className="editor-tab__icon">{getFileIcon(legacyFile)}</span>
-            <span className="editor-tab__name">{legacyFile.split('/').pop()}</span>
+            <span className="editor-tab__name">{legacyFile.split('/').pop() ?? legacyFile}</span>
             {onClose && (
-              <button 
-                className="editor-tab__close" 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClose();
-                }}
-                title="Close Editor"
+              <button
+                className="editor-tab__close"
+                onClick={(e) => { e.stopPropagation(); onClose(); }}
+                title="Close file"
               >
                 <X size={12} />
               </button>
@@ -105,16 +102,14 @@ export default function CodeViewer({ legacyCode, modernCode, legacyFile, modernF
           <div className="editor-tab active" style={{ borderTopColor: 'var(--text-success)' }}>
             <span className="editor-tab__icon" style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
               {getFileIcon(modernFile)}
+              <Sparkles size={10} style={{ color: 'var(--text-success)' }} />
             </span>
-            <span className="editor-tab__name">{modernFile.split('/').pop()}</span>
+            <span className="editor-tab__name">{modernFile.split('/').pop() ?? modernFile} <span style={{ color: 'var(--text-success)', fontSize: '10px' }}>✦ Modern</span></span>
             {onClose && (
-              <button 
-                className="editor-tab__close" 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClose();
-                }}
-                title="Close Editor"
+              <button
+                className="editor-tab__close"
+                onClick={(e) => { e.stopPropagation(); onClose(); }}
+                title="Close file"
               >
                 <X size={12} />
               </button>
@@ -134,7 +129,7 @@ export default function CodeViewer({ legacyCode, modernCode, legacyFile, modernF
         {modernCode && (
           <div className={`editor-pane ${hasValidLegacy ? 'editor-pane--split' : ''}`} style={{ flex: 1 }}>
             <div className="editor-pane__label" style={{ color: 'var(--text-success)' }}>
-              Modern — {modernFile}
+              Modern — {modernFile || legacyFile}
             </div>
             <CodeBlock code={modernCode} />
           </div>

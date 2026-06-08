@@ -1,0 +1,114 @@
+// =============================================================================
+//  hooks/useSettings.ts
+//  Reads all user settings from localStorage in a single place.
+//
+//  Replaces duplicated localStorage reading in page.tsx (handleUpload, handleStart).
+//
+//  Usage:
+//    const { backendUrl, provider, model, apiKey, allApiKeys } = useSettings();
+// =============================================================================
+
+import { useCallback, useEffect, useState } from 'react';
+import type { AIProvider } from '@/types';
+
+const DEFAULT_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:4000';
+
+
+// ── Helper ────────────────────────────────────────────────────────────────────
+
+function readStoredString(key: string, fallback = ''): string {
+  if (typeof window === 'undefined') return fallback;
+  const raw = localStorage.getItem(key);
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw || fallback;
+  }
+}
+
+// ── Hook ──────────────────────────────────────────────────────────────────────
+
+export interface AppSettings {
+  backendUrl: string;
+  provider: AIProvider;
+  model: string;
+  apiKey: string;
+  localOutputPath: string;
+  allApiKeys: Record<string, string>;
+  toolsConfig: Record<string, boolean>;
+  aliasesConfig: Record<string, string>;
+  promptFragments: Record<string, string>;
+}
+
+export function useSettings(settingsTrigger = 0): AppSettings {
+  const [settings, setSettings] = useState<AppSettings>(() => readSettings());
+
+  useEffect(() => {
+    setSettings(readSettings());
+  }, [settingsTrigger]);
+
+  // Apply theme on mount and when settings change
+  useEffect(() => {
+    const theme = readStoredString('setting_general_theme', 'dark');
+    document.documentElement.className = `theme-${theme}`;
+  }, [settingsTrigger]);
+
+  return settings;
+}
+
+/**
+ * Pure function — reads all settings from localStorage.
+ * Call this inside an effect or callback when you need fresh values.
+ */
+export function readSettings(): AppSettings {
+  // Provider and model come ONLY from user Settings — no hardcoded fallbacks.
+  // If not configured, empty string is returned; ActionButtons will block Start
+  // and show a clear message telling the user to configure Settings first.
+  const provider = readStoredString('setting_selected_provider', 'google') as AIProvider;
+  const model    = readStoredString(`setting_${provider}_selected_model`, '');
+  const apiKey   = readStoredString(`setting_${provider}_api_key`, '');
+
+  return {
+    backendUrl:      readStoredString('setting_general_backend_url', DEFAULT_BACKEND_URL),
+    provider,
+    model,
+    apiKey,
+    localOutputPath: readStoredString('setting_general_local_output_path', ''),
+    allApiKeys: {
+      anthropic:    readStoredString('setting_anthropic_api_key'),
+      openai:       readStoredString('setting_openai_api_key'),
+      google:       readStoredString('setting_google_api_key'),
+      grok:         readStoredString('setting_grok_api_key'),
+      groq:         readStoredString('setting_groq_api_key'),
+      openrouter:   readStoredString('setting_openrouter_api_key'),
+      huggingface:  readStoredString('setting_huggingface_api_key'),
+    },
+    toolsConfig: (() => {
+      try { return JSON.parse(localStorage.getItem('ai_config_tools') || '{}'); } catch { return {}; }
+    })(),
+    aliasesConfig: (() => {
+      try { return JSON.parse(localStorage.getItem('ai_config_aliases') || '{}'); } catch { return {}; }
+    })(),
+    promptFragments: (() => {
+      const ids = ['system-agent-rules', 'validation-rules-strict', 'scanner-stack-detect'];
+      const map: Record<string, string> = {};
+      for (const id of ids) {
+        const saved = localStorage.getItem(`ai_prompt_fragment_${id}`);
+        if (saved !== null) map[id] = saved;
+      }
+      return map;
+    })(),
+  };
+}
+
+/** Hook that returns just the backend URL and a refresher callback. */
+export function useBackendUrl(settingsTrigger = 0): string {
+  const [url, setUrl] = useState(DEFAULT_BACKEND_URL);
+
+  useEffect(() => {
+    setUrl(readStoredString('setting_general_backend_url', DEFAULT_BACKEND_URL));
+  }, [settingsTrigger]);
+
+  return url;
+}
