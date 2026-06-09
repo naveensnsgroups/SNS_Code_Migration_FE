@@ -15,8 +15,8 @@ import type { DetectedStack, FileNode, TargetStack } from '@/types';
 
 export interface ScanResponse {
   sessionId: string;
-  fileTree: FileNode[];
-  detectedStack: DetectedStack;
+  fileTree?: FileNode[];
+  detectedStack?: DetectedStack;
 }
 
 export interface FileContentResponse {
@@ -62,6 +62,10 @@ export interface MigrateStartPayload {
   toolsConfig: Record<string, boolean>;
   aliasesConfig: Record<string, string>;
   promptFragments: Record<string, string>;
+  googleMaxRetries?: number;
+  googleRetryDelayRateLimit?: number;
+  googleRetryDelayOther?: number;
+  googleTimeoutMs?: number;
 }
 
 // ── API Functions ─────────────────────────────────────────────────────────────

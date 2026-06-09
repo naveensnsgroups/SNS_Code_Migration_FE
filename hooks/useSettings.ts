@@ -35,6 +35,10 @@ export interface AppSettings {
   model: string;
   apiKey: string;
   localOutputPath: string;
+  googleMaxRetries: number;
+  googleRetryDelayRateLimit: number;
+  googleRetryDelayOther: number;
+  googleTimeoutMs: number;
   allApiKeys: Record<string, string>;
   toolsConfig: Record<string, boolean>;
   aliasesConfig: Record<string, string>;
@@ -75,6 +79,10 @@ export function readSettings(): AppSettings {
     model,
     apiKey,
     localOutputPath: readStoredString('setting_general_local_output_path', ''),
+    googleMaxRetries: parseInt(readStoredString('setting_google_max_retries', '3'), 10),
+    googleRetryDelayRateLimit: parseInt(readStoredString('setting_google_retry_delay_rate_limit', '60'), 10),
+    googleRetryDelayOther: parseInt(readStoredString('setting_google_retry_delay_other', '-1'), 10),
+    googleTimeoutMs: parseInt(readStoredString('setting_google_timeout_ms', '300000'), 10),
     allApiKeys: {
       anthropic:    readStoredString('setting_anthropic_api_key'),
       openai:       readStoredString('setting_openai_api_key'),
