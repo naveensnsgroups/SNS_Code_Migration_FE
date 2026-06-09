@@ -63,10 +63,11 @@ export default function StackBadge({ detectedStack }: Props) {
               <span>Layer Analysis</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <LayerRow label="Frontend (Client)"    value={detectedStack.frontend} />
-              <LayerRow label="API / Bridge Layer"   value={detectedStack.apiLayer} />
-              <LayerRow label="Backend (Server)"     value={detectedStack.backend} />
-              <LayerRow label="Database (Storage)"   value={detectedStack.databaseLayer} />
+              <LayerRow label="Frontend (Client)"      value={detectedStack.frontend} />
+              <LayerRow label="API / Bridge Layer"     value={detectedStack.apiLayer} />
+              <LayerRow label="Backend (Server)"       value={detectedStack.backend} />
+              <LayerRow label="Database (Storage)"     value={detectedStack.databaseLayer} />
+              <LayerRow label="Cloud / Infrastructure" value={detectedStack.cloudInfrastructure} />
             </div>
           </div>
         </div>

@@ -116,7 +116,7 @@ export function useMigration(
   const [modernFolderBasename, setModernFolderBasename] = useState<string>('');
   const [tokenUsage, setTokenUsage]       = useState<TokenUsage | null>(null);
 
-  const isRunning     = ['scanning', 'planning', 'pseudocode', 'migrating', 'building', 'validating', 'testing'].includes(status);
+  const isRunning     = ['scanning', 'planning'].includes(status);
   const hasProject    = fileTree.length > 0;
   const planPhaseDone = phases.find(p => p.id === 'plan')?.status === 'done';
 

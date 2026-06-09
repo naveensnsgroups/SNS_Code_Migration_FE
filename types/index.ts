@@ -4,11 +4,6 @@ export type MigrationStatus =
   | 'idle'
   | 'scanning'
   | 'planning'
-  | 'pseudocode'
-  | 'migrating'
-  | 'building'
-  | 'validating'
-  | 'testing'
   | 'complete'
   | 'error'
   | 'paused';
@@ -35,6 +30,7 @@ export interface DetectedStack {
   apiLayer?: string;
   backend?: string;
   databaseLayer?: string;
+  cloudInfrastructure?: string;
 }
 
 export interface TargetStack {
@@ -124,11 +120,4 @@ export const AI_PROVIDERS: Record<AIProvider, { label: string }> = {
 export const MIGRATION_PHASES: MigrationPhase[] = [
   { id: 'scan',       label: 'Scan Codebase',         status: 'pending' },
   { id: 'plan',       label: 'Generate Plan',          status: 'pending' },
-  { id: 'pseudocode', label: 'Write Pseudocode',       status: 'pending' },
-  { id: 'migrate',    label: 'Migrate Files',          status: 'pending' },
-  { id: 'install',    label: 'Install Dependencies',   status: 'pending' },
-  { id: 'build',      label: 'Build Project',          status: 'pending' },
-  { id: 'validate',   label: 'Validate & Fix',         status: 'pending' },
-  { id: 'test',       label: 'Run Tests',              status: 'pending' },
-  { id: 'report',     label: 'Final Report',           status: 'pending' },
 ];

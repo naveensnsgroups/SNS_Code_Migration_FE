@@ -71,7 +71,7 @@ export default function AIPanel({
   const [testFramework,   setTestFramework]   = useState('');
 
   // ── Derived flags ──────────────────────────────────────────────────────────
-  const isRunning     = ['scanning', 'planning', 'pseudocode', 'migrating', 'building', 'validating', 'testing'].includes(status);
+  const isRunning     = ['scanning', 'planning'].includes(status);
   const isComplete    = status === 'complete';
   const planPhaseDone = phases.find(p => p.id === 'plan')?.status === 'done';
 

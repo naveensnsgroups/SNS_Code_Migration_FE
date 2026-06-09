@@ -30,31 +30,21 @@ export default function ActionButtons({
   status, detectedStack, hasApiKey, hasModel, hasProject, planPhaseDone,
   onStart, onStop, onPause,
 }: Props) {
-  const isRunning  = ['scanning', 'planning', 'pseudocode', 'migrating', 'building', 'validating', 'testing'].includes(status);
+  const isRunning  = ['scanning', 'planning'].includes(status);
   const isIdle     = status === 'idle';
   const isComplete = status === 'complete';
   const isPaused   = status === 'paused';
   const isError    = status === 'error';
 
-  // Stage determines label and enable condition
-  const isStage1 = !planPhaseDone;  // before plan is done → Stage-1 scan/analysis
-  const buttonLabel = isStage1 ? 'Start Stage-1 Analysis' : 'Start Modernisation';
+  const buttonLabel = isComplete ? 'Re-run Stage-1 Analysis' : 'Start Stage-1 Analysis';
+  const canStart = hasProject && hasApiKey && hasModel;
 
-  // Stage-1: need project + API key + model
-  // Stage-2: additionally need detectedStack
-  const canStart = isStage1
-    ? (hasProject && hasApiKey && hasModel)
-    : (hasProject && hasApiKey && hasModel && !!detectedStack);
-
-  // Clear message for each missing condition
   const disabledReason = !hasProject
     ? 'Open a project folder first'
     : !hasApiKey
     ? 'Add an API key in Settings first'
     : !hasModel
     ? 'Select a model in Settings first'
-    : !canStart && !isStage1
-    ? 'Complete Stage-1 scan first'
     : '';
 
   return (
@@ -115,7 +105,7 @@ export default function ActionButtons({
       {isComplete && (
         <div className="completion-badge-premium">
           <CheckCircle2 size={16} />
-          <span>Modernisation complete!</span>
+          <span>Stage-1 Analysis complete!</span>
         </div>
       )}
     </div>
