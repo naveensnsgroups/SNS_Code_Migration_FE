@@ -55,6 +55,8 @@ interface MCPServer {
 interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
+  cachedInputTokens?: number;
+  readCachedInputTokens?: number;
   totalTokens: number;
   estimatedCost: number;
   model?: string;
@@ -68,6 +70,8 @@ interface Props {
   settingsTrigger?: number;
   tokenUsage?: TokenUsage;
   backendUrl?: string;
+  isRunning?: boolean;
+  sessionId?: string | null;
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -78,6 +82,8 @@ export default function AIConfigTab({
   settingsTrigger = 0,
   tokenUsage,
   backendUrl = 'http://localhost:4000',
+  isRunning = false,
+  sessionId,
 }: Props) {
   const [activeSubTab,     setActiveSubTab]     = useState<SubTab>('agents');
 
@@ -275,7 +281,7 @@ export default function AIConfigTab({
 
         {activeSubTab === 'variables'  && <VariablesTab />}
         {activeSubTab === 'mcp'        && <McpTab servers={mcpServers} loading={mcpLoading} onRefresh={refreshMcp} />}
-        {activeSubTab === 'tokens'     && <TokensTab tokenUsage={tokenUsage} />}
+        {activeSubTab === 'tokens'     && <TokensTab tokenUsage={tokenUsage} isRunning={isRunning} sessionId={sessionId} />}
         {activeSubTab === 'fragments'  && <FragmentsTab />}
 
         {activeSubTab === 'tools' && (

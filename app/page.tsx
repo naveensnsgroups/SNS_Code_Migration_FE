@@ -164,6 +164,8 @@ export default function HomePage() {
             settingsTrigger={settingsTrigger}
             tokenUsage={tokenUsage ?? undefined}
             backendUrl={backendUrl}
+            isRunning={isRunning}
+            sessionId={sessionId}
           />
         ) : (
           <CodeViewer

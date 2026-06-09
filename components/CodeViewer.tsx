@@ -16,22 +16,26 @@ function CodeBlock({ code, language }: { code: string; language?: string }) {
   return (
     <pre style={{
       margin: 0,
-      padding: '12px 16px',
+      padding: '12px 0',
       fontFamily: 'var(--font-mono)',
       fontSize: '12px',
       lineHeight: '1.7',
       color: 'var(--text-primary)',
       whiteSpace: 'pre',
-      overflow: 'auto',
+      overflowX: 'auto',
+      overflowY: 'auto',
+      flex: 1,
     }}>
-      {code.split('\n').map((line, i) => (
-        <div key={i} style={{ display: 'flex', gap: '16px' }}>
-          <span style={{ color: 'var(--text-muted)', minWidth: '32px', textAlign: 'right', userSelect: 'none', flexShrink: 0 }}>
-            {i + 1}
-          </span>
-          <span style={{ flex: 1 }}>{highlightLine(line)}</span>
-        </div>
-      ))}
+      <div style={{ minWidth: 'max-content', padding: '0 16px' }}>
+        {code.split('\n').map((line, i) => (
+          <div key={i} style={{ display: 'flex', gap: '16px' }}>
+            <span style={{ color: 'var(--text-muted)', minWidth: '32px', textAlign: 'right', userSelect: 'none', flexShrink: 0 }}>
+              {i + 1}
+            </span>
+            <span style={{ flex: 1 }}>{highlightLine(line)}</span>
+          </div>
+        ))}
+      </div>
     </pre>
   );
 }

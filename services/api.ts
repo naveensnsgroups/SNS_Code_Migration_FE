@@ -29,6 +29,29 @@ export interface ModernTreeResponse {
   modernPath?: string;
 }
 
+export interface SessionTokensResponse {
+  tokenUsage: {
+    inputTokens: number;
+    outputTokens: number;
+    cachedInputTokens?: number;
+    readCachedInputTokens?: number;
+    totalTokens: number;
+    estimatedCost: number;
+    model?: string;
+  } | null;
+  /** Per-model aggregation of token usage history (SNS IDE ModelTokenUsageData pattern) */
+  modelBreakdown: {
+    modelId: string;
+    inputTokens: number;
+    outputTokens: number;
+    cachedInputTokens?: number;
+    readCachedInputTokens?: number;
+    totalTokens: number;
+    lastUsed?: string;
+  }[];
+  sessionId: string;
+}
+
 export interface MigrateStartPayload {
   sessionId: string;
   targetStack: TargetStack;
@@ -202,4 +225,20 @@ export async function fetchTools(backendUrl: string): Promise<ToolsResponse> {
   const res = await fetch(`${backendUrl}/api/config/tools`);
   if (!res.ok) throw new Error('Failed to load tool registry');
   return res.json() as Promise<ToolsResponse>;
+}
+
+/**
+ * Fetch persisted token usage from session.json for a session.
+ * GET /api/migrate/tokens?sessionId=...
+ * Used to hydrate the Token Usage tab on load/page refresh.
+ */
+export async function fetchSessionTokens(
+  backendUrl: string,
+  sessionId: string
+): Promise<SessionTokensResponse> {
+  const res = await fetch(
+    `${backendUrl}/api/migrate/tokens?sessionId=${sessionId}`
+  );
+  if (!res.ok) throw new Error('Failed to load session tokens');
+  return res.json() as Promise<SessionTokensResponse>;
 }

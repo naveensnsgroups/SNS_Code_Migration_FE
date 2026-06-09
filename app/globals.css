@@ -456,7 +456,9 @@ body {
 }
 .editor-pane {
   flex: 1;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   position: relative;
 }
 .editor-pane--split { border-left: 1px solid var(--border-color); }
@@ -1637,4 +1639,29 @@ body {
   color: #f48771 !important; /* Alert/Gitignore Coral */
 }
 
+/* Hide native details chevrons in the terminal panel */
+.terminal details > summary {
+  list-style: none;
+}
+.terminal details > summary::-webkit-details-marker {
+  display: none;
+}
+.terminal details > summary::marker {
+  display: none;
+}
 
+/* ── Global micro-animations ───────────────────────────────────────────── */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+@keyframes pulse-ring {
+  0%   { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(1.6); opacity: 0; }
+}

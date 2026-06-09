@@ -30,6 +30,7 @@ import {
   pauseMigration,
   fetchFileContent,
   fetchModernTree,
+  fetchSessionTokens,
 } from '@/services/api';
 import { readSettings } from '@/hooks/useSettings';
 import { useSSE, SSEEventPayload } from '@/hooks/useSSE';
@@ -57,6 +58,8 @@ function markMigrated(tree: FileNode[], path: string): FileNode[] {
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
+  cachedInputTokens?: number;
+  readCachedInputTokens?: number;
   totalTokens: number;
   estimatedCost: number;
   model?: string;
@@ -147,6 +150,23 @@ export function useMigration(
     }
   }, [sessionId, refreshModernTree]);
 
+  // ── Load persisted token usage when session changes ─────────────────────────
+  // This ensures Token Usage tab shows real data even after page refresh or
+  // when the tab was closed during migration.
+  useEffect(() => {
+    if (!sessionId) {
+      setTokenUsage(null);
+      return;
+    }
+    fetchSessionTokens(backendUrl, sessionId)
+      .then(data => {
+        if (data.tokenUsage && data.tokenUsage.totalTokens > 0) {
+          setTokenUsage(data.tokenUsage);
+        }
+      })
+      .catch(() => { /* non-critical — live SSE will populate */ });
+  }, [sessionId, backendUrl]);
+
   // ── SSE event handler ───────────────────────────────────────────────────────
   const handleSSEEvent = useCallback((event: SSEEventPayload) => {
     switch (event.type) {
@@ -203,15 +223,26 @@ export function useMigration(
         closeSSE();
         break;
 
-      case 'token_usage':
-        setTokenUsage({
+      case 'token_usage': {
+        const tu = {
           inputTokens:   (event.data.inputTokens   as number) ?? 0,
           outputTokens:  (event.data.outputTokens  as number) ?? 0,
+          cachedInputTokens: (event.data.cachedInputTokens as number) ?? undefined,
+          readCachedInputTokens: (event.data.readCachedInputTokens as number) ?? undefined,
           totalTokens:   (event.data.totalTokens   as number) ?? 0,
           estimatedCost: (event.data.estimatedCost as number) ?? 0,
           model:         (event.data.model         as string) ?? undefined,
-        });
+        };
+        setTokenUsage(tu);
+        // Write to localStorage so the TokensTab can read it without the SSE stream
+        // Also maintain a history of per-agent usage for breakdown display
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('live_token_usage', JSON.stringify({ ...tu, updatedAt: Date.now() }));
+          } catch { /* storage full */ }
+        }
         break;
+      }
 
       case 'heartbeat':
         break;
