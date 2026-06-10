@@ -209,13 +209,26 @@ export function useMigration(
         if (sessionId) refreshModernTree(sessionId);
         break;
 
-      case 'complete':
-        setStatus('complete');
-        setProgress(100);
-        closeSSE();
-        addLog('🎉 Migration complete!', 'success');
+      case 'complete': {
+        const payload = event.data as any;
+        if (payload && payload.isScan) {
+          setFileTree(payload.fileTree || []);
+          setDetectedStack(payload.detectedStack || null);
+          setStatus('idle');
+          closeSSE();
+          if (payload.detectedStack) {
+            addLog(`✅ Scanned ${payload.detectedStack.fileCount} files`, 'success');
+            addLog(`Detected: ${payload.detectedStack.language} / ${payload.detectedStack.framework} / ${payload.detectedStack.database}`, 'info');
+          }
+        } else {
+          setStatus('complete');
+          setProgress(100);
+          closeSSE();
+          addLog('🎉 Migration complete!', 'success');
+        }
         if (sessionId) refreshModernTree(sessionId);
         break;
+      }
 
       case 'error':
         setStatus('error');
@@ -278,21 +291,28 @@ export function useMigration(
     formData.append('provider', settings.provider);
     formData.append('model',    settings.model);
     formData.append('apiKey',   settings.apiKey);
+    formData.append('maxRetries',          settings.googleMaxRetries.toString());
+    formData.append('retryDelayRateLimit', settings.googleRetryDelayRateLimit.toString());
+    formData.append('retryDelayOther',     settings.googleRetryDelayOther.toString());
+    formData.append('timeoutMs',           settings.googleTimeoutMs.toString());
 
     try {
       const data = await scanProject(backendUrl, formData);
-      setSessionId(data.sessionId);
-      setFileTree(data.fileTree);
-      setDetectedStack(data.detectedStack);
-      setStatus('idle');
-      refreshModernTree(data.sessionId);
-      addLog(`✅ Scanned ${data.detectedStack.fileCount} files`, 'success');
-      addLog(`Detected: ${data.detectedStack.language} / ${data.detectedStack.framework} / ${data.detectedStack.database}`, 'info');
+      const sid = data.sessionId;
+      setSessionId(sid);
+      
+      setLogs([]);
+      setProgress(0);
+      setFileTree([]);
+      setDetectedStack(null);
+      
+      addLog(`Unpacked folder. Connecting stream to session ${sid}...`, 'info');
+      openSSE(`${backendUrl}/api/stream/${sid}`);
     } catch (err: unknown) {
-      addLog(`Scan failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      addLog(`Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
       setStatus('error');
     }
-  }, [addLog, backendUrl, refreshModernTree]);
+  }, [addLog, backendUrl, refreshModernTree, openSSE]);
 
   // ── Start Migration ─────────────────────────────────────────────────────────
   const handleStart = useCallback(async (target: TargetStack) => {
@@ -330,6 +350,10 @@ export function useMigration(
         toolsConfig:     settings.toolsConfig,
         aliasesConfig:   settings.aliasesConfig,
         promptFragments: settings.promptFragments,
+        googleMaxRetries:          settings.googleMaxRetries,
+        googleRetryDelayRateLimit: settings.googleRetryDelayRateLimit,
+        googleRetryDelayOther:     settings.googleRetryDelayOther,
+        googleTimeoutMs:           settings.googleTimeoutMs,
       });
 
       openSSE(`${backendUrl}/api/stream/${sessionId}`);
