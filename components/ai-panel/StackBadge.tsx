@@ -5,7 +5,7 @@
 // =============================================================================
 'use client';
 
-import { Cpu, Database, FolderOpen } from 'lucide-react';
+import { Cpu, Database } from 'lucide-react';
 import type { DetectedStack } from '@/types';
 
 interface LayerRowProps {
@@ -27,6 +27,8 @@ interface Props {
 }
 
 export default function StackBadge({ detectedStack }: Props) {
+  if (!detectedStack) return null;
+
   return (
     <div className="ai-section">
       <div className="ai-section__title">
@@ -34,49 +36,42 @@ export default function StackBadge({ detectedStack }: Props) {
         <span>Detected Stack</span>
       </div>
 
-      {detectedStack ? (
-        <div className="stack-badge-premium">
-          {/* Summary pills */}
-          <div className="stack-badge-grid">
-            <div className="badge-pill">
-              <span className="badge-pill__label">Language</span>
-              <span className="badge-pill__value lang-color">{detectedStack.language}</span>
-            </div>
-            <div className="badge-pill">
-              <span className="badge-pill__label">Framework</span>
-              <span className="badge-pill__value fw-color">{detectedStack.framework}</span>
-            </div>
-            <div className="badge-pill">
-              <span className="badge-pill__label">Database</span>
-              <span className="badge-pill__value db-color">{detectedStack.database}</span>
-            </div>
-            <div className="badge-pill">
-              <span className="badge-pill__label">Files Count</span>
-              <span className="badge-pill__value files-color">{detectedStack.fileCount}</span>
-            </div>
+      <div className="stack-badge-premium">
+        {/* Summary pills */}
+        <div className="stack-badge-grid">
+          <div className="badge-pill">
+            <span className="badge-pill__label">Language</span>
+            <span className="badge-pill__value lang-color">{detectedStack.language}</span>
           </div>
+          <div className="badge-pill">
+            <span className="badge-pill__label">Framework</span>
+            <span className="badge-pill__value fw-color">{detectedStack.framework}</span>
+          </div>
+          <div className="badge-pill">
+            <span className="badge-pill__label">Database</span>
+            <span className="badge-pill__value db-color">{detectedStack.database}</span>
+          </div>
+          <div className="badge-pill">
+            <span className="badge-pill__label">Files Count</span>
+            <span className="badge-pill__value files-color">{detectedStack.fileCount}</span>
+          </div>
+        </div>
 
-          {/* Layer Analysis */}
-          <div className="architectural-layers" style={{ marginTop: '14px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '10px' }}>
-            <div style={{ fontSize: '9px', textTransform: 'uppercase', color: '#858585', marginBottom: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', letterSpacing: '0.5px' }}>
-              <Database size={10} style={{ color: '#007acc' }} />
-              <span>Layer Analysis</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <LayerRow label="Frontend (Client)"      value={detectedStack.frontend} />
-              <LayerRow label="API / Bridge Layer"     value={detectedStack.apiLayer} />
-              <LayerRow label="Backend (Server)"       value={detectedStack.backend} />
-              <LayerRow label="Database (Storage)"     value={detectedStack.databaseLayer} />
-              <LayerRow label="Cloud / Infrastructure" value={detectedStack.cloudInfrastructure} />
-            </div>
+        {/* Layer Analysis */}
+        <div className="architectural-layers" style={{ marginTop: '14px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '10px' }}>
+          <div style={{ fontSize: '9px', textTransform: 'uppercase', color: '#858585', marginBottom: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', letterSpacing: '0.5px' }}>
+            <Database size={10} style={{ color: '#007acc' }} />
+            <span>Layer Analysis</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <LayerRow label="Frontend (Client)"      value={detectedStack.frontend} />
+            <LayerRow label="API / Bridge Layer"     value={detectedStack.apiLayer} />
+            <LayerRow label="Backend (Server)"       value={detectedStack.backend} />
+            <LayerRow label="Database (Storage)"     value={detectedStack.databaseLayer} />
+            <LayerRow label="Cloud / Infrastructure" value={detectedStack.cloudInfrastructure} />
           </div>
         </div>
-      ) : (
-        <div className="stack-badge-empty">
-          <FolderOpen size={16} />
-          <span>Select legacy project directory to detect stack</span>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

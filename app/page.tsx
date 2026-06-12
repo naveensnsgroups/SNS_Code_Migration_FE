@@ -182,6 +182,7 @@ export default function HomePage() {
               phases={phases}
               progress={progress}
               currentFile={currentFile}
+              logs={logs}
               hasProject={hasProject}
               onStart={handleStart}
               onStop={handleStop}

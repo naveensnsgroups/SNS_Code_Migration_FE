@@ -217,14 +217,14 @@ export function useMigration(
           setStatus('idle');
           closeSSE();
           if (payload.detectedStack) {
-            addLog(`✅ Scanned ${payload.detectedStack.fileCount} files`, 'success');
+            addLog(`Scanned ${payload.detectedStack.fileCount} files`, 'success');
             addLog(`Detected: ${payload.detectedStack.language} / ${payload.detectedStack.framework} / ${payload.detectedStack.database}`, 'info');
           }
         } else {
           setStatus('complete');
           setProgress(100);
           closeSSE();
-          addLog('🎉 Migration complete!', 'success');
+          addLog('Migration complete.', 'success');
         }
         if (sessionId) refreshModernTree(sessionId);
         break;

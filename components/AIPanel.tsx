@@ -13,14 +13,18 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { Activity } from 'lucide-react';
 import type { DetectedStack, MigrationStatus, MigrationPhase, TargetStack, AIProvider } from '@/types';
+import type { LogEntry } from '@/types';
 
 import { readSettings } from '@/hooks/useSettings';
+import { useLiveStatus } from '@/hooks/useLiveStatus';
 
-import StackBadge       from '@/components/ai-panel/StackBadge';
-import TargetConfig     from '@/components/ai-panel/TargetConfig';
-import PipelineProgress from '@/components/ai-panel/PipelineProgress';
-import ActionButtons    from '@/components/ai-panel/ActionButtons';
+import StackBadge         from '@/components/ai-panel/StackBadge';
+import TargetConfig       from '@/components/ai-panel/TargetConfig';
+import PipelineProgress   from '@/components/ai-panel/PipelineProgress';
+import ActionButtons      from '@/components/ai-panel/ActionButtons';
+import LiveStatusOverlay  from '@/components/live-status/LiveStatusOverlay';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -30,6 +34,7 @@ interface Props {
   phases:           MigrationPhase[];
   progress:         number;
   currentFile:      string;
+  logs:             import('@/types').LogEntry[];
   hasProject:       boolean;
   onStart:          (target: TargetStack) => void;
   onStop:           () => void;
@@ -55,7 +60,7 @@ function setLocal(key: string, value: string) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function AIPanel({
-  detectedStack, status, phases, progress, currentFile, hasProject,
+  detectedStack, status, phases, progress, currentFile, logs, hasProject,
   onStart, onStop, onPause,
   settingsTrigger = 0, onSettingsSaved, width,
 }: Props) {
@@ -74,6 +79,12 @@ export default function AIPanel({
   const isRunning     = ['scanning', 'planning'].includes(status);
   const isComplete    = status === 'complete';
   const planPhaseDone = phases.find(p => p.id === 'plan')?.status === 'done';
+
+  // ── Live Status Overlay toggle (manual only) ───────────────────────────
+  const [liveOpen, setLiveOpen] = useState(false);
+
+  // Derive real-time live status from logs
+  const liveData = useLiveStatus(logs, status, isRunning, progress, currentFile);
 
   // ── Sync settings from localStorage on trigger ────────────────────────────
   useEffect(() => {
@@ -133,13 +144,28 @@ export default function AIPanel({
   return (
     <aside className="ai-panel" style={{ width: width ? `${width}px` : undefined }}>
       <div className="ai-panel__header" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <span>Operational Panel</span>
+        <span style={{ flex: 1 }}>Operational Panel</span>
+
+        {/* Live Activity toggle — SNS IDE CapabilityChip exact pattern */}
+        <button
+          className={`ls-toggle-btn ${liveOpen ? 'ls-toggle-btn--open' : ''}`}
+          onClick={() => setLiveOpen(o => !o)}
+          title={liveOpen ? 'Close Live Activity' : 'Open Live Activity'}
+        >
+          <Activity size={11} className="ls-toggle-btn__icon" />
+          <span className="ls-toggle-btn__label">Live</span>
+          {isRunning && !liveOpen && (
+            <span className="ls-toggle-btn__dot" />
+          )}
+        </button>
       </div>
 
-      <div className="ai-panel__body">
+      <div className="ai-panel__body" style={{ position: 'relative' }}>
 
         {/* Detected Stack */}
         <StackBadge detectedStack={detectedStack} />
+
+        {/* Live Status — active tool, agent, stage, file, alerts (OLD EMBEDDED — removed) */}
 
         {/* Target Config — free-text inputs, visible after Stage-1 plan */}
         {detectedStack && planPhaseDone && (
@@ -178,6 +204,16 @@ export default function AIPanel({
           onStop={onStop}
           onPause={onPause}
         />
+
+        {/* Live Activity Overlay — covers body when toggled, config panels stay mounted below */}
+        {liveOpen && (
+          <LiveStatusOverlay
+            data={liveData}
+            status={status}
+            isRunning={isRunning}
+            onClose={() => setLiveOpen(false)}
+          />
+        )}
 
       </div>
     </aside>

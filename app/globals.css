@@ -625,6 +625,505 @@ body {
 .btn--secondary:hover { background: var(--bg-hover); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* ── Live Status Panel ──────────────────────────────────────────────────── */
+/* Inserted inside Operational Panel (ai-panel__body) above PipelineProgress  */
+
+/* Status header row */
+.live-status__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.live-status__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+.live-status__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.live-status__dot--running { background: var(--text-success); animation: blink 1.4s ease-in-out infinite; }
+.live-status__dot--scanning { background: var(--accent-blue); animation: blink 1s ease-in-out infinite; }
+.live-status__dot--complete { background: var(--text-success); }
+.live-status__dot--error    { background: var(--text-error); }
+.live-status__dot--idle     { background: var(--text-muted); }
+.live-status__dot--paused   { background: var(--text-warning); }
+
+.live-status__badge--running  { color: var(--text-success); }
+.live-status__badge--scanning { color: var(--accent-blue); }
+.live-status__badge--complete { color: var(--text-success); }
+.live-status__badge--error    { color: var(--text-error); }
+.live-status__badge--idle     { color: var(--text-muted); }
+.live-status__badge--paused   { color: var(--text-warning); }
+
+/* Key-value info rows */
+.live-status__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.live-status__row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 16px;
+}
+.live-status__key {
+  font-size: 9.5px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  min-width: 46px;
+  flex-shrink: 0;
+}
+.live-status__val {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.live-status__val--muted { color: var(--text-secondary); }
+.live-status__val--file  { color: var(--text-info); }
+
+/* Progress inside live status — uses existing .progress-bar tokens */
+.live-status__progress {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+.live-status__progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+.live-status__progress-bar {
+  height: 3px;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.live-status__progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-blue), var(--accent-green));
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+
+/* Indeterminate — animated shimmer, no fake %, shown only when no real data */
+.live-status__progress-fill--indeterminate {
+  width: 35%;
+  background: linear-gradient(90deg, transparent, var(--accent-blue), transparent);
+  animation: progress-shimmer 1.6s ease-in-out infinite;
+}
+@keyframes progress-shimmer {
+  0%   { transform: translateX(-200%); }
+  100% { transform: translateX(500%); }
+}
+
+/* Active Tool section */
+.live-status__tool {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  background: rgba(86,156,214,0.06);
+  border-left: 2px solid #569cd6;
+  border-radius: 0 3px 3px 0;
+  margin-bottom: 8px;
+}
+.live-status__tool-label {
+  font-size: 9.5px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.live-status__tool-name {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--accent-yellow);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.live-status__tool-args {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Alert rows */
+.live-status__alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 6px;
+}
+.live-status__alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  line-height: 1.4;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.live-status__alert:last-child { border-bottom: none; }
+.live-status__alert-icon { flex-shrink: 0; padding-top: 1px; }
+.live-status__alert--warn  { color: var(--text-warning); }
+.live-status__alert--error { color: var(--text-error); }
+.live-status__alert-msg    { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Empty state — shown when idle with no project */
+.live-status__empty {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  padding: 4px 0;
+  font-style: italic;
+}
+
+/* ── Live Status Overlay (ls-overlay) ──────────────────────────────────── */
+/* Covers ai-panel__body when toggle is active. position:absolute, inset:0  */
+
+/* Toggle button in ai-panel__header */
+.live-status-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: background 0.1s, color 0.1s;
+  flex-shrink: 0;
+}
+.live-status-toggle:hover { background: var(--bg-hover); color: var(--text-primary); }
+.live-status-toggle--active { background: rgba(86,156,214,0.15); color: var(--accent-blue); }
+
+/* Pulsing dot on toggle when running */
+.live-status-toggle__dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-success);
+  animation: blink 1.4s ease-in-out infinite;
+}
+
+/* ── ls-toggle-btn — SNS IDE CapabilityChip exact pattern ──────────────── */
+/* Source: ai-chat-ui/src/browser/style/index.css — .theia-ChatInput-CapabilityChip */
+.ls-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 4px;                        /* theia: calc(ui-padding * 2/3) ≈ 4px     */
+  border: 1px solid var(--border-color);     /* theia: --theia-dropdown-border           */
+  padding: 2px 7px 2px 5px;                  /* theia: ui-padding/3 top/bot, padding l/r */
+  font-size: 11px;                           /* theia: --theia-ui-font-size1             */
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  white-space: nowrap;
+  position: relative;
+  transition: background-color 0.1s, border-color 0.1s, color 0.1s;
+}
+
+/* Hover — unchecked only (theia: toolbar-hoverBackground) */
+.ls-toggle-btn:not(.ls-toggle-btn--open):hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Open/checked state (theia: inputOption-activeBorder + activeBackground) */
+.ls-toggle-btn--open {
+  border-color: var(--accent-blue);          /* --theia-inputOption-activeBorder */
+  background-color: rgba(0, 122, 204, 0.15); /* --theia-inputOption-activeBackground */
+  color: var(--text-primary);
+}
+
+/* Focus visible (theia: focusBorder, outline-offset: -1px) */
+.ls-toggle-btn:focus-visible {
+  outline: 1px solid var(--accent-blue);
+  outline-offset: -1px;
+}
+
+/* Icon */
+.ls-toggle-btn__icon { flex-shrink: 0; }
+
+/* Label */
+.ls-toggle-btn__label { line-height: 1; }
+
+/* Badge dot — exact theia-capabilities-badge-dot pattern */
+/* position: absolute; top/right = border-width (1px) */
+.ls-toggle-btn__dot {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: var(--text-success);     /* --theia-activityBarBadge-background */
+  pointer-events: none;
+  animation: blink 1.4s ease-in-out infinite;
+}
+
+/* Overlay container — covers ai-panel__body */
+.ls-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: var(--bg-primary);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border-color);
+}
+
+/* Sticky header bar */
+.ls-overlay__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  flex-shrink: 0;
+}
+.ls-overlay__header-title {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.ls-overlay__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: background 0.1s, color 0.1s;
+}
+.ls-overlay__close:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* Sections */
+.ls-overlay__section {
+  padding: 10px 12px 6px;
+}
+.ls-overlay__divider {
+  height: 1px;
+  background: var(--border-subtle, var(--border-color));
+  margin: 0 12px;
+  opacity: 0.5;
+}
+
+/* Status badge */
+.ls-overlay__status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.ls-overlay__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+.ls-overlay__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ls-overlay__dot--running  { background: var(--text-success); animation: blink 1.4s ease-in-out infinite; }
+.ls-overlay__dot--scanning { background: var(--accent-blue);  animation: blink 1s ease-in-out infinite; }
+.ls-overlay__dot--complete { background: var(--text-success); }
+.ls-overlay__dot--error    { background: var(--text-error); }
+.ls-overlay__dot--idle     { background: var(--text-muted); }
+.ls-overlay__dot--paused   { background: var(--text-warning); }
+.ls-overlay__badge--running  { color: var(--text-success); }
+.ls-overlay__badge--scanning { color: var(--accent-blue); }
+.ls-overlay__badge--complete { color: var(--text-success); }
+.ls-overlay__badge--error    { color: var(--text-error); }
+.ls-overlay__badge--idle     { color: var(--text-muted); }
+.ls-overlay__badge--paused   { color: var(--text-warning); }
+.ls-overlay__pct {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+/* Progress bar */
+.ls-overlay__progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.ls-overlay__progress-track {
+  height: 3px;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.ls-overlay__progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-blue), var(--accent-green));
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+.ls-overlay__progress-fill--indeterminate {
+  width: 35%;
+  background: linear-gradient(90deg, transparent, var(--accent-blue), transparent);
+  animation: progress-shimmer 1.6s ease-in-out infinite;
+}
+
+/* Active Tool */
+.ls-overlay__tool {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  background: rgba(86,156,214,0.06);
+  border-left: 2px solid var(--accent-blue);
+  border-radius: 0 3px 3px 0;
+}
+.ls-overlay__tool-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--accent-yellow);
+  font-weight: 500;
+}
+.ls-overlay__tool-args {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Session key-value rows */
+.ls-overlay__rows { display: flex; flex-direction: column; gap: 4px; }
+.ls-overlay__row  { display: flex; align-items: baseline; gap: 6px; }
+.ls-overlay__key  {
+  font-size: 9.5px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  min-width: 44px;
+  flex-shrink: 0;
+}
+.ls-overlay__val {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.ls-overlay__val--file { color: var(--text-info, var(--accent-blue)); }
+
+/* Recent Activity feed */
+.ls-overlay__activity { display: flex; flex-direction: column; gap: 3px; }
+.ls-overlay__activity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.ls-overlay__activity-dot { color: var(--text-muted); flex-shrink: 0; }
+.ls-overlay__activity-msg {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Alerts */
+.ls-overlay__alerts { display: flex; flex-direction: column; gap: 4px; }
+.ls-overlay__alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  line-height: 1.4;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.05));
+}
+.ls-overlay__alert:last-child { border-bottom: none; }
+.ls-overlay__alert-icon  { flex-shrink: 0; padding-top: 1px; }
+.ls-overlay__alert--warn  { color: var(--text-warning); }
+.ls-overlay__alert--error { color: var(--text-error); }
+.ls-overlay__alert-msg {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* Empty state */
+.ls-overlay__empty {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 /* ── Bottom Panel (Terminal + Status) ──────────────────────────────────── */
 .bottom-panel {
   height: var(--terminal-height);
@@ -676,6 +1175,261 @@ body {
 .terminal__msg--command { color: var(--accent-yellow); }
 .terminal__cursor { display: inline-block; width: 8px; height: 13px; background: var(--text-primary); vertical-align: middle; animation: blink 1s step-end infinite; margin-left: 2px; }
 @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* ── Terminal: Spinner animation ────────────────────────────────────────── */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; display: inline-block; }
+
+/* ── Terminal: Tool Call Rows (SNS IDE theia-toolCall pattern) ──────────── */
+.tool-call { margin: 1px 0; padding-left: 0; }
+.tool-call details { list-style: none; }
+.tool-call details summary { list-style: none; }
+.tool-call details summary::-webkit-details-marker { display: none; }
+
+.tool-call__summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px 3px 6px;
+  cursor: pointer;
+  user-select: none;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  border-radius: 0 3px 3px 0;
+  transition: background 0.1s;
+}
+.tool-call__summary:hover { background: rgba(255,255,255,0.03); }
+
+/* Running state — blue left border */
+.tool-call__summary--running {
+  color: #9cdcfe;
+  border-left: 2px solid #569cd6;
+  background: rgba(86,156,214,0.05);
+}
+/* Finished state — subtle green left border */
+.tool-call__summary--finished {
+  color: var(--text-secondary);
+  border-left: 2px solid #264f78;
+  background: rgba(30,80,120,0.04);
+}
+
+.tool-call__chevron {
+  display: inline-flex;
+  transition: transform 0.15s ease;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.tool-call__chevron--open { transform: rotate(90deg); }
+
+.tool-call__icon { flex-shrink: 0; display: flex; align-items: center; }
+.tool-call__icon--done { color: var(--text-success); }
+.tool-call__icon--running { color: #569cd6; }
+
+.tool-call__verb { color: var(--text-muted); }
+.tool-call__verb--running { color: #569cd6; }
+.tool-call__name { color: var(--accent-yellow); font-weight: 500; }
+.tool-call__args { color: var(--text-muted); }
+.tool-call__time { margin-left: auto; font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
+
+.tool-call__result { padding-left: 16px; padding-top: 2px; }
+.tool-call__result-content {
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
+  max-height: 320px;
+  overflow-y: auto;
+  background: rgba(0,0,0,0.2);
+  border-radius: 3px;
+  margin: 0 0 4px 0;
+  border-left: 2px solid var(--border-color);
+}
+
+/* ── Terminal: Thinking / AI Request Rows — SNS IDE theia-thinking pattern ── */
+/* Source: snside/packages/ai-chat-ui/src/browser/style/index.css L891-1120    */
+
+.thinking-row {
+  /* Exact copy of .theia-thinking (SNS IDE L892-899) */
+  font-weight: normal;
+  color: var(--text-secondary);            /* theia-descriptionForeground */
+  line-height: 20px;
+  margin-top: 6px;
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+
+/* Native <details> triangle marker — SNS IDE L1105-1108 */
+.thinking-row details summary::marker,
+.thinking-row details summary::-webkit-details-marker {
+  color: var(--accent-blue);               /* theia-button-background */
+}
+
+.thinking-row details summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 6px;
+  user-select: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-style: italic;
+  list-style: none;
+  cursor: pointer;
+}
+.thinking-row details summary:hover { background: rgba(255,255,255,0.02); }
+.thinking-row details summary::-webkit-details-marker { display: none; }
+
+/* Pre body — exact SNS IDE L1110-1120 */
+.thinking-row details pre {
+  cursor: text;
+  line-height: 1rem;
+  margin-top: 0;
+  margin-bottom: 0;
+  padding: 6px;
+  background-color: var(--bg-primary);     /* theia-editor-background */
+  overflow: auto;
+  text-wrap: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-left: 16px;
+  border-radius: 3px;
+}
+
+.thinking-row__label { color: var(--text-secondary); }
+
+
+/* ── Terminal: Log Tag Badges ───────────────────────────────────────────── */
+/* Colored pill badge shown BEFORE the message text for [Tag] prefixed logs  */
+.log-tag {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0 5px;
+  border-radius: 3px;
+  font-size: 9.5px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 16px;
+  height: 16px;
+  white-space: nowrap;
+}
+/* Tag color palette — each subsystem gets a distinct color */
+.log-tag--knowledge { background: rgba(124,92,191,0.18); color: #b39ddb; border: 1px solid rgba(124,92,191,0.3); }
+.log-tag--planner   { background: rgba(74,144,217,0.15); color: #9cdcfe; border: 1px solid rgba(74,144,217,0.28); }
+.log-tag--todo      { background: rgba(197,160,40,0.15);  color: #dcc450; border: 1px solid rgba(197,160,40,0.3);  }
+.log-tag--progress  { background: rgba(78,201,176,0.12);  color: #4ec9b0; border: 1px solid rgba(78,201,176,0.25); }
+.log-tag--context   { background: rgba(206,145,62,0.15);  color: #ce9178; border: 1px solid rgba(206,145,62,0.28); }
+.log-tag--warn      { background: rgba(204,167,0,0.12);   color: #cca700; border: 1px solid rgba(204,167,0,0.25);  }
+.log-tag--error-tag { background: rgba(244,135,113,0.12); color: #f48771; border: 1px solid rgba(244,135,113,0.25); }
+.log-tag--default   { background: rgba(134,134,134,0.1);  color: var(--text-secondary); border: 1px solid rgba(134,134,134,0.2); }
+
+/* ── Terminal: Generic Log Rows ─────────────────────────────────────────── */
+.log-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 2px 8px;
+  margin: 0;
+  min-height: 20px;
+  border-radius: 2px;
+  transition: background 0.08s;
+}
+.log-row:hover { background: rgba(255,255,255,0.025); }
+
+.log-row__time {
+  color: var(--text-muted);
+  font-size: 10px;
+  flex-shrink: 0;
+  min-width: 54px;
+  padding-top: 2px;
+  font-family: var(--font-mono);
+}
+.log-row__icon { flex-shrink: 0; display: flex; align-items: center; padding-top: 2px; height: 18px; }
+.log-row__body { flex: 1; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.log-row__msg {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  word-break: break-word;
+  flex: 1;
+  min-width: 0;
+}
+.log-row__msg--success { color: var(--text-success); }
+.log-row__msg--error   { color: var(--text-error); }
+.log-row__msg--warning { color: var(--text-warning); }
+.log-row__msg--info    { color: var(--text-secondary); }
+.log-row__msg--command { color: var(--accent-yellow); }
+
+/* ── Terminal: Phase / Agent Status Rows ────────────────────────────────── */
+.phase-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 10px;
+  margin: 2px 0;
+  border-radius: 0 3px 3px 0;
+}
+.phase-row--complete {
+  background: rgba(78,201,176,0.06);
+  border-left: 2px solid #4ec9b0;
+}
+.phase-row--active {
+  background: rgba(86,156,214,0.06);
+  border-left: 2px solid #569cd6;
+}
+.phase-row__icon { flex-shrink: 0; }
+.phase-row__text {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  flex: 1;
+}
+.phase-row__text--complete { color: #4ec9b0; }
+.phase-row__text--active   { color: #569cd6; }
+.phase-row__time { margin-left: auto; font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
+
+/* ── Terminal: Todo Row ─────────────────────────────────────────────────── */
+.todo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px 2px 10px;
+  margin: 1px 0;
+  border-left: 2px solid rgba(220,196,80,0.4);
+}
+.todo-row__icon { flex-shrink: 0; color: #dcc450; }
+.todo-row__text { font-family: var(--font-mono); font-size: 11px; color: #dcc450; flex: 1; }
+.todo-row__time { margin-left: auto; font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
+
+/* ── Terminal: Running indicator in tab bar ─────────────────────────────── */
+.terminal-running-dot {
+  width: 6px; height: 6px;
+  background: var(--text-success);
+  border-radius: 50%;
+  display: inline-block;
+  animation: blink 1s infinite;
+}
+.terminal-running-label {
+  font-size: 11px;
+  color: var(--text-success);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.terminal-empty {
+  color: var(--text-muted);
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
 
 /* ── Status Bar ────────────────────────────────────────────────────────── */
 .status-bar {
