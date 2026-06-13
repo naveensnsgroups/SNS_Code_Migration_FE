@@ -65,6 +65,19 @@ export interface TokenUsage {
   model?: string;
 }
 
+// ── Active Tool condensation helper ─────────────────────────────────────────
+function condenseSseArgs(args: Record<string, unknown>): string {
+  const entries = Object.entries(args);
+  if (entries.length === 0) return '';
+  return entries
+    .map(([k, v]) => {
+      const vs = typeof v === 'string' ? v : JSON.stringify(v);
+      return `${k}: ${vs.length > 36 ? vs.slice(0, 36) + '\u2026' : vs}`;
+    })
+    .join('  \u00b7  ')
+    .slice(0, 90);
+}
+
 // ── Hook Return Type ──────────────────────────────────────────────────────────
 
 export interface UseMigrationReturn {
@@ -86,6 +99,7 @@ export interface UseMigrationReturn {
   isRunning: boolean;
   hasProject: boolean;
   planPhaseDone: boolean;
+  activeTool: { name: string; args: string } | null;  // ← SSE-driven, no log parsing
   // Handlers
   handleUpload: (files: FileList | File[], explicitPaths?: string[]) => Promise<void>;
   handleStart: (target: TargetStack) => Promise<void>;
@@ -115,6 +129,7 @@ export function useMigration(
   const [modernFileTree, setModernFileTree]           = useState<FileNode[]>([]);
   const [modernFolderBasename, setModernFolderBasename] = useState<string>('');
   const [tokenUsage, setTokenUsage]       = useState<TokenUsage | null>(null);
+  const [activeTool, setActiveTool]       = useState<{ name: string; args: string } | null>(null);
 
   const isRunning     = ['scanning', 'planning'].includes(status);
   const hasProject    = fileTree.length > 0;
@@ -170,6 +185,19 @@ export function useMigration(
   // ── SSE event handler ───────────────────────────────────────────────────────
   const handleSSEEvent = useCallback((event: SSEEventPayload) => {
     switch (event.type) {
+      case 'tool_call': {
+        // Direct SSE event from AgentExecutor — no log parsing needed
+        const name = event.data.name as string ?? '';
+        const args = event.data.args as Record<string, unknown> ?? {};
+        setActiveTool({ name, args: condenseSseArgs(args) });
+        break;
+      }
+
+      case 'tool_response':
+        // Tool finished — clear active tool immediately
+        setActiveTool(null);
+        break;
+
       case 'log':
         addLog(
           event.data.message as string,
@@ -211,6 +239,7 @@ export function useMigration(
 
       case 'complete': {
         const payload = event.data as any;
+        setActiveTool(null);   // clear any stuck tool on completion
         if (payload && payload.isScan) {
           setFileTree(payload.fileTree || []);
           setDetectedStack(payload.detectedStack || null);
@@ -231,6 +260,7 @@ export function useMigration(
       }
 
       case 'error':
+        setActiveTool(null);
         setStatus('error');
         addLog(event.data.message as string, 'error');
         closeSSE();
@@ -366,6 +396,7 @@ export function useMigration(
   // ── Stop ─────────────────────────────────────────────────────────────────────
   const handleStop = useCallback(async () => {
     closeSSE();
+    setActiveTool(null);
     if (sessionId) await stopMigration(backendUrl, sessionId);
     setStatus('idle');
     addLog('Migration stopped by user.', 'warning');
@@ -374,6 +405,7 @@ export function useMigration(
   // ── Pause ────────────────────────────────────────────────────────────────────
   const handlePause = useCallback(async () => {
     closeSSE();
+    setActiveTool(null);
     if (sessionId) await pauseMigration(backendUrl, sessionId);
     setStatus('paused');
     addLog('Migration paused.', 'warning');
@@ -409,6 +441,7 @@ export function useMigration(
     legacyCode, modernCode, logs, progress, currentFile, phases,
     modernFileTree, modernFolderBasename, tokenUsage,
     isRunning, hasProject, planPhaseDone,
+    activeTool,
     handleUpload, handleStart, handleStop, handlePause, handleSelectFile, clearSelectedFile,
   };
 }

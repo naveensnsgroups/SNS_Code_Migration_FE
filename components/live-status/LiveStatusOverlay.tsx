@@ -81,9 +81,15 @@ export default function LiveStatusOverlay({ data, status, isRunning, onClose }: 
     alerts, recentActivity,
   } = data;
 
-  const dotClass   = DOT_CLASS[status]   ?? DOT_CLASS.idle;
-  const badgeClass = BADGE_CLASS[status] ?? BADGE_CLASS.idle;
-  const statusText = STATUS_TEXT[status] ?? 'Ready';
+  // Fix: if status says idle but realPct > 0 and < 100, there's active work
+  // (happens when status state lags behind SSE progress events)
+  const effectiveStatus: MigrationStatus =
+    (!isRunning && realPct > 0 && realPct < 100) ? 'planning' : status;
+
+  const dotClass   = DOT_CLASS[effectiveStatus]   ?? DOT_CLASS.idle;
+  const badgeClass = BADGE_CLASS[effectiveStatus] ?? BADGE_CLASS.idle;
+  const statusText = STATUS_TEXT[effectiveStatus] ?? 'Ready';
+  const effectiveRunning = isRunning || (realPct > 0 && realPct < 100);
 
   return (
     <div className="ls-overlay">
@@ -112,7 +118,7 @@ export default function LiveStatusOverlay({ data, status, isRunning, onClose }: 
         </div>
 
         {/* Progress bar */}
-        {isRunning && (
+        {effectiveRunning && (
           <div style={{ marginTop: 8 }}>
             <div className="ls-overlay__progress-label">
               <span>
@@ -138,34 +144,42 @@ export default function LiveStatusOverlay({ data, status, isRunning, onClose }: 
 
       <Divider />
 
-      {/* ── Active Tool ──────────────────────────────────────────────────── */}
-      {activeTool && (
+      {/* ── Active Tool / Thinking ──────────────────────────────────────── */}
+      {effectiveRunning && (
         <>
           <div className="ls-overlay__section">
             <SectionTitle>Active Tool</SectionTitle>
-            <div className="ls-overlay__tool">
-              <div className="ls-overlay__tool-name">
-                <Loader2 size={11} className="spin" style={{ color: 'var(--accent-blue)', flexShrink: 0 }} />
-                <span>{activeTool.name}</span>
+            {activeTool ? (
+              <div className="ls-overlay__tool">
+                <div className="ls-overlay__tool-name">
+                  <Loader2 size={11} className="spin" style={{ color: 'var(--accent-blue)', flexShrink: 0 }} />
+                  <span>{activeTool.name}</span>
+                </div>
+                {activeTool.args && (
+                  <div className="ls-overlay__tool-args">{activeTool.args}</div>
+                )}
               </div>
-              {activeTool.args && (
-                <div className="ls-overlay__tool-args">{activeTool.args}</div>
-              )}
-            </div>
+            ) : (
+              // LLM is between tool calls — generating next response
+              <div className="ls-overlay__thinking">
+                <Loader2 size={10} className="spin" style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                <span>Generating response…</span>
+              </div>
+            )}
           </div>
           <Divider />
         </>
       )}
 
-      {/* ── Session Info ─────────────────────────────────────────────────── */}
-      {(currentAgent || currentStage || (currentFile && isRunning)) && (
+      {/* ── Session Info ────────────────────────────────────────── */}
+      {(currentAgent || currentStage || (currentFile && effectiveRunning)) && (
         <>
           <div className="ls-overlay__section">
             <SectionTitle>Session</SectionTitle>
             <div className="ls-overlay__rows">
               <Row label="Agent" value={currentAgent} />
               <Row label="Stage" value={currentStage} />
-              {isRunning && currentFile && (
+              {effectiveRunning && currentFile && (
                 <Row
                   label="File"
                   value={currentFile.split('/').pop() ?? currentFile}
@@ -221,8 +235,8 @@ export default function LiveStatusOverlay({ data, status, isRunning, onClose }: 
         </div>
       )}
 
-      {/* ── Empty state ──────────────────────────────────────────────────── */}
-      {!isRunning && status === 'idle' && alerts.length === 0 && (
+      {/* ── Empty state ────────────────────────────────────────── */}
+      {!effectiveRunning && status === 'idle' && alerts.length === 0 && (
         <div className="ls-overlay__section">
           <span className="ls-overlay__empty">
             No active migration. Start a migration to see live status.

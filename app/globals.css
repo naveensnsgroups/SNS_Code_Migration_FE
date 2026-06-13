@@ -1049,6 +1049,19 @@ body {
   white-space: nowrap;
 }
 
+/* Thinking state — shown when running but no tool executing (LLM generating) */
+.ls-overlay__thinking {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 4px 2px;
+}
+
+
 /* Session key-value rows */
 .ls-overlay__rows { display: flex; flex-direction: column; gap: 4px; }
 .ls-overlay__row  { display: flex; align-items: baseline; gap: 6px; }

@@ -2,7 +2,8 @@
 //  hooks/useLiveStatus.ts
 //
 //  Real-time Live Status hook.
-//  Derives actionable status from logs[] (SSE-driven, updates every event).
+//  Derives session info from logs[]; activeTool comes DIRECTLY from SSE state
+//  (useMigration.activeTool) — no log parsing for tool calls.
 //
 //  Performance: only scans last 150 logs for derived state.
 //               All logs scanned for alerts (to catch old errors).
@@ -16,55 +17,8 @@ import { useMemo } from 'react';
 import type { LogEntry, MigrationStatus } from '@/types';
 import type { LiveStatusData, AlertItem } from '@/components/live-status/types';
 
-// ── Parsing utilities (scan recentLogs only) ──────────────────────────────────
-
-/**
- * Returns the currently executing tool — the last [Tool Call] that has no
- * [Tool Response] after it. Returns null if all calls are finished.
- */
-function deriveActiveTool(logs: LogEntry[]): { name: string; args: string } | null {
-  for (let i = logs.length - 1; i >= 0; i--) {
-    const msg = logs[i].message;
-
-    if (msg.startsWith('[Tool Call]')) {
-      const hasResponse = logs.slice(i + 1).some(l =>
-        l.message.startsWith('[Tool Response]')
-      );
-      if (hasResponse) return null;
-
-      // Parse tool name and args from "[Tool Call] Executing tool "name"(args)..."
-      const raw       = msg.replace(/^\[Tool Call\]\s*/, '').trim();
-      const cleanRaw  = raw
-        .replace(/^Executing tool\s*"?/, '')
-        .replace(/"?\s*\.+\s*$/, '')
-        .trim();
-
-      const pi = cleanRaw.indexOf('(');
-      if (pi === -1) return { name: cleanRaw, args: '' };
-
-      const name    = cleanRaw.slice(0, pi).trim();
-      const rawArgs = cleanRaw.slice(pi + 1).replace(/\.+\)$|\)$/, '').trim();
-
-      // Condense args to readable short form
-      let condensed = rawArgs;
-      try {
-        const parsed = JSON.parse(rawArgs) as Record<string, unknown>;
-        const entries = Object.entries(parsed);
-        condensed = entries.length > 0
-          ? entries.map(([k, v]) => {
-              const vs = typeof v === 'string' ? v : JSON.stringify(v);
-              return `${k}: ${vs.length > 32 ? vs.slice(0, 32) + '\u2026' : vs}`;
-            }).join('  ·  ').slice(0, 90)
-          : '';
-      } catch { /* keep raw */ }
-
-      return { name, args: condensed };
-    }
-
-    if (msg.startsWith('[Tool Response]')) return null;
-  }
-  return null;
-}
+// ── Log-derived utilities (agent/stage/fileCount/alerts/activity) ─────────────
+// NOTE: activeTool is NOT derived here — it comes directly from SSE state.
 
 /** Returns the most recently active agent label. */
 function deriveAgent(logs: LogEntry[]): string {
@@ -149,20 +103,22 @@ export function useLiveStatus(
   isRunning:   boolean,
   progress:    number,
   currentFile: string,
+  /** Direct SSE state from useMigration — no log parsing. Always accurate. */
+  activeTool:  { name: string; args: string } | null,
 ): LiveStatusData {
   // Only scan the last 150 logs for derived UI state — prevents O(n) slowdown
   // on long sessions with 500+ log entries.
   const recent = useMemo(() => logs.slice(-150), [logs]);
 
-  const activeTool     = useMemo(() => deriveActiveTool(recent),      [recent]);
-  const currentAgent   = useMemo(() => deriveAgent(recent),           [recent]);
-  const currentStage   = useMemo(() => deriveStage(recent),           [recent]);
-  const fileCount      = useMemo(() => deriveFileCount(recent),        [recent]);
-  const alerts         = useMemo(() => deriveAlerts(logs),            [logs]);
-  const recentActivity = useMemo(() => deriveRecentActivity(recent),  [recent]);
+  // activeTool is passed in directly — NOT derived from logs
+  const currentAgent   = useMemo(() => deriveAgent(recent),          [recent]);
+  const currentStage   = useMemo(() => deriveStage(recent),          [recent]);
+  const fileCount      = useMemo(() => deriveFileCount(recent),       [recent]);
+  const alerts         = useMemo(() => deriveAlerts(logs),           [logs]);
+  const recentActivity = useMemo(() => deriveRecentActivity(recent), [recent]);
 
   // Real progress — no mock, no increment
-  // Priority: SSE progress% (Phase 2) → log-derived% (Phase 1) → -1 (indeterminate)
+  // Priority: SSE progress% → log-derived file% → -1 (indeterminate)
   const realPct = useMemo((): number => {
     if (progress > 0) return progress;
     if (fileCount)    return fileCount.pct;
@@ -173,7 +129,7 @@ export function useLiveStatus(
     realPct,
     fileCount,
     currentFile,
-    activeTool,
+    activeTool,           // direct from SSE state
     currentAgent,
     currentStage,
     alerts,

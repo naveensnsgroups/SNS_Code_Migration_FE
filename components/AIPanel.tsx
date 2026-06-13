@@ -36,6 +36,7 @@ interface Props {
   currentFile:      string;
   logs:             import('@/types').LogEntry[];
   hasProject:       boolean;
+  activeTool:       { name: string; args: string } | null;  // ← SSE-driven from useMigration
   onStart:          (target: TargetStack) => void;
   onStop:           () => void;
   onPause:          () => void;
@@ -60,7 +61,8 @@ function setLocal(key: string, value: string) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function AIPanel({
-  detectedStack, status, phases, progress, currentFile, logs, hasProject,
+  detectedStack, status, phases, progress, currentFile,
+  logs, hasProject, activeTool,
   onStart, onStop, onPause,
   settingsTrigger = 0, onSettingsSaved, width,
 }: Props) {
@@ -84,7 +86,7 @@ export default function AIPanel({
   const [liveOpen, setLiveOpen] = useState(false);
 
   // Derive real-time live status from logs
-  const liveData = useLiveStatus(logs, status, isRunning, progress, currentFile);
+  const liveData = useLiveStatus(logs, status, isRunning, progress, currentFile, activeTool);
 
   // ── Sync settings from localStorage on trigger ────────────────────────────
   useEffect(() => {
