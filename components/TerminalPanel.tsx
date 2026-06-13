@@ -1,7 +1,7 @@
 'use client';
 
 // =============================================================================
-//  TerminalPanel.tsx — Exact SNS IDE Toolcall-Part-Renderer Pattern
+//  TerminalPanel.tsx — SNS IDE Toolcall-Part-Renderer Pattern
 //
 //  Mirrors: snside/packages/ai-chat-ui/src/browser/chat-response-renderer/
 //           toolcall-part-renderer.tsx + thinking-part-renderer.tsx
@@ -12,7 +12,9 @@
 //  3. Thinking block: <details><summary>Thinking</summary><pre>...</pre></details>
 //  4. condenseArguments: show "key: value, key2: value2" truncated to 80 chars
 //  5. Result data shown inside <details> expanded body — same as SNS IDE
-//  6. Spinner for in-flight calls (not-yet-finished state)
+//  6. Auto-collapse on finish, spinner for in-flight calls
+//  7. CSS classes from globals.css — NOT inline styles
+//  8. [Tag] prefix badges — color-coded pill per subsystem
 // =============================================================================
 
 import { LogEntry, LogLevel } from '@/types';
@@ -24,7 +26,6 @@ import {
   Info,
   ChevronRight,
   Loader2,
-  Brain,
   ListTodo,
 } from 'lucide-react';
 
@@ -35,8 +36,6 @@ interface Props {
 }
 
 // ── condenseArguments — mirrors SNS IDE toolcall-utils.ts:167 ─────────────────
-// Shows "key: value, key2: value2" truncated to 80 chars, same as SNS IDE
-
 const MAX_CONDENSED = 80;
 const MAX_VAL_LEN   = 30;
 
@@ -67,9 +66,7 @@ function condenseArguments(rawArgs: string): string {
 }
 
 // ── Parse [Tool Call] message → toolName + raw args JSON ─────────────────────
-
 function parseToolCall(msg: string): { name: string; argsJson: string } {
-  // "[Tool Call] toolName({...}...)" or "[Tool Call] Executing tool "toolName"..."
   const body = msg.replace(/^\[Tool Call\]\s*/, '').trim()
                   .replace(/^Executing tool\s*"?/, '').replace(/"?\s*\.\.\.\s*$/, '').trim();
   const pi = body.indexOf('(');
@@ -79,38 +76,44 @@ function parseToolCall(msg: string): { name: string; argsJson: string } {
   return { name, argsJson: rawArgs || '{}' };
 }
 
-// ── Render tool response data — mirrors SNS IDE renderResult() ────────────────
+// ── Tag Badge System ──────────────────────────────────────────────────────────
+// Parses "[Tag] message body" and returns { tag, body, tagClass }
 
+interface ParsedTag {
+  tag: string;
+  body: string;
+  tagClass: string;
+}
+
+const TAG_CLASS_MAP: Record<string, string> = {
+  'KnowledgeGraph': 'log-tag--knowledge',
+  'PlannerAgent':   'log-tag--planner',
+  'Progress':       'log-tag--progress',
+  'Todo':           'log-tag--todo',
+  'Context':        'log-tag--context',
+};
+
+function parseTagPrefix(msg: string): ParsedTag | null {
+  const m = msg.match(/^\[([A-Za-z][A-Za-z0-9\-_]*)\]\s*([\s\S]*)/);
+  if (!m) return null;
+  const tag = m[1];
+  const body = m[2].trim();
+  const tagClass = TAG_CLASS_MAP[tag] ?? 'log-tag--default';
+  return { tag, body, tagClass };
+}
+
+// ── Result Content ────────────────────────────────────────────────────────────
 function ResultContent({ text }: { text: string }) {
-  // Try to parse as JSON for pretty display
   let display = text;
   try {
     const parsed = JSON.parse(text);
     display = JSON.stringify(parsed, null, 2);
   } catch { /* keep as text */ }
 
-  return (
-    <div style={{
-      padding: '6px 12px',
-      fontFamily: 'var(--font-mono)',
-      fontSize: '11px',
-      color: 'var(--text-secondary)',
-      whiteSpace: 'pre-wrap',
-      wordBreak: 'break-word',
-      lineHeight: '1.6',
-      maxHeight: '200px',
-      overflowY: 'auto',
-      background: 'rgba(0,0,0,0.18)',
-      borderRadius: '3px',
-      margin: '0 0 4px 0',
-    }}>
-      {display}
-    </div>
-  );
+  return <div className="tool-call__result-content">{display}</div>;
 }
 
 // ── Group consecutive logs: [Tool Call] → [Tool Response] → [Tool Data] ───────
-
 interface ToolGroup {
   kind: 'tool';
   callLog: LogEntry;
@@ -136,7 +139,6 @@ function groupLogs(logs: LogEntry[]): Block[] {
     const msg = log.message;
     const lvl = (log as any).level as string;
 
-    // Stream text — accumulate consecutive stream chunks into one block
     if (lvl === 'stream') {
       const chunks: LogEntry[] = [log]; i++;
       while (i < logs.length && (logs[i] as any).level === 'stream') {
@@ -145,7 +147,6 @@ function groupLogs(logs: LogEntry[]): Block[] {
       blocks.push({ kind: 'stream', chunks }); continue;
     }
 
-    // Tool Call → consume Response + Data if immediately following
     if (msg.startsWith('[Tool Call]')) {
       const group: ToolGroup = { kind: 'tool', callLog: log }; i++;
       if (i < logs.length && logs[i].message.startsWith('[Tool Response]')) {
@@ -157,11 +158,9 @@ function groupLogs(logs: LogEntry[]): Block[] {
       blocks.push(group); continue;
     }
 
-    // Orphan response/data (already consumed above — skip)
     if (msg.startsWith('[Tool Response]') || msg.startsWith('[Tool Data]')) {
       i++; continue;
     }
-
     if (msg.startsWith('[AI Request]') || msg.startsWith('[AI Response]')) {
       blocks.push({ kind: 'thinking', log }); i++; continue;
     }
@@ -171,7 +170,7 @@ function groupLogs(logs: LogEntry[]): Block[] {
     if (
       msg.includes('Stage') || msg.includes('Phase') ||
       msg.includes('complete') || msg.includes('Initializing') ||
-      msg.startsWith('🎉') || msg.startsWith('🚀')
+      msg.startsWith('[PlannerAgent]') || msg.startsWith('[Scanner')
     ) {
       blocks.push({ kind: 'phase', log }); i++; continue;
     }
@@ -182,80 +181,76 @@ function groupLogs(logs: LogEntry[]): Block[] {
 }
 
 // ── ToolRow — mirrors SNS IDE <details className='theia-toolCall-finished'> ───
-
 function ToolRow({ group }: { group: ToolGroup }) {
   const { name, argsJson } = parseToolCall(group.callLog.message);
   const condensed = condenseArguments(argsJson);
-  const dataText  = group.dataLog?.message.replace(/^\[Tool Data\]\s*/, '').trim() ?? '';
+
+  // Primary body: [Tool Data] log (actual output — file contents, search results, etc.)
+  const dataText = group.dataLog?.message.replace(/^\[Tool Data\]\s*/, '').trim() ?? '';
+
+  // Fallback body: [Tool Response] log (summary message — always present on finish)
+  const responseText = group.responseLog?.message
+    .replace(/^\[Tool Response\]\s*/, '')
+    .trim() ?? '';
+
+  // bodyText: use dataText if available, otherwise responseText, otherwise nothing
+  const bodyText = dataText || responseText;
+
   const isFinished = !!group.responseLog;
 
   const [isOpen, setIsOpen] = useState(!isFinished);
 
-  // Sync open state when tool completion status changes
   useEffect(() => {
     setIsOpen(!isFinished);
   }, [isFinished]);
 
+  const summaryClass = `tool-call__summary ${isFinished ? 'tool-call__summary--finished' : 'tool-call__summary--running'}`;
+  const chevronClass = `tool-call__chevron ${isOpen ? 'tool-call__chevron--open' : ''}`;
+
   return (
-    <div style={{ margin: '1px 0', paddingLeft: '8px' }}>
-      <details open={isOpen} onToggle={(e) => setIsOpen((e.target as HTMLDetailsElement).open)} style={{ listStyle: 'none' }}>
-        <summary style={{
-          display: 'flex', alignItems: 'center', gap: '6px',
-          padding: '3px 8px 3px 2px',
-          cursor: 'pointer', userSelect: 'none',
-          listStyle: 'none',
-          fontFamily: 'var(--font-mono)', fontSize: '11.5px',
-          // SNS IDE .theia-toolCall-finished style
-          color: isFinished ? 'var(--text-secondary)' : '#569cd6',
-          borderLeft: `2px solid ${isFinished ? '#264f78' : '#569cd6'}`,
-          paddingLeft: '6px',
-          background: 'rgba(30,80,120,0.06)',
-          borderRadius: '0 3px 3px 0',
-        }}>
-          {/* Custom Chevron Indicator */}
-          <span style={{
-            display: 'inline-flex',
-            transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
-            transition: 'transform 0.15s ease',
-            color: 'var(--text-muted)',
-            flexShrink: 0
-          }}>
+    <div className="tool-call">
+      <details
+        open={isOpen}
+        onToggle={(e) => setIsOpen((e.target as HTMLDetailsElement).open)}
+      >
+        <summary className={summaryClass}>
+          {/* Chevron */}
+          <span className={chevronClass}>
             <ChevronRight size={10} />
           </span>
 
-          {/* Status Icon */}
+          {/* Status icon */}
+          <span className={`tool-call__icon ${isFinished ? 'tool-call__icon--done' : 'tool-call__icon--running'}`}>
+            {isFinished
+              ? <Check size={11} />
+              : <Loader2 size={11} className="spin" />
+            }
+          </span>
+
+          {/* Label — matches SNS IDE: "Ran {name}({argsLabel})" or "Running {name}({argsLabel})" */}
           {isFinished ? (
-            <Check size={11} style={{ color: 'var(--text-success)', flexShrink: 0 }} />
+            <>
+              <span className="tool-call__verb">Ran </span>
+              <strong className="tool-call__name">{name}</strong>
+              <span className="tool-call__args">
+                ({condensed || ''})
+              </span>
+            </>
           ) : (
-            <Loader2 size={11} className="spin" style={{ color: '#569cd6', flexShrink: 0 }} />
+            <>
+              <span className="tool-call__verb tool-call__verb--running">Running </span>
+              <strong className="tool-call__name">{name}</strong>
+              {condensed && <span className="tool-call__args">({condensed})</span>}
+            </>
           )}
 
-          {/* Matches SNS IDE: "Ran {name}({argsLabel})" */}
-          {isFinished ? (
-            <>
-              <span style={{ color: 'var(--text-muted)' }}>Ran </span>
-              <strong style={{ color: '#dcdcaa' }}>{name}</strong>
-              {condensed
-                ? <span style={{ color: 'var(--text-muted)' }}>({condensed})</span>
-                : <span style={{ color: 'var(--text-muted)' }}>()</span>
-              }
-            </>
-          ) : (
-            <>
-              <span style={{ color: '#569cd6' }}>Running </span>
-              <strong style={{ color: '#dcdcaa' }}>{name}</strong>
-              {condensed && <span style={{ color: 'var(--text-muted)' }}>({condensed})</span>}
-            </>
-          )}
-          <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--text-muted)', flexShrink: 0 }}>
-            {group.callLog.timestamp}
-          </span>
+          <span className="tool-call__time">{group.callLog.timestamp}</span>
         </summary>
 
-        {/* Response result body — mirrors SNS IDE <div className='theia-toolCall-response-result'> */}
-        {dataText && (
-          <div style={{ paddingLeft: '16px', paddingTop: '2px' }}>
-            <ResultContent text={dataText} />
+        {/* Result body — shows dataText (Tool Data) or responseText (Tool Response) fallback */}
+        {bodyText && (
+          <div className="tool-call__result">
+            <ResultContent text={bodyText} />
           </div>
         )}
       </details>
@@ -263,171 +258,96 @@ function ToolRow({ group }: { group: ToolGroup }) {
   );
 }
 
-// ── ThinkingRow — mirrors SNS IDE <details><summary>Thinking</summary>... ─────
-
+// ── ThinkingRow — exact SNS IDE theia-thinking pattern ──────────────────────
+// Source: thinking-part-renderer.tsx:34-43
+// <div className='theia-thinking'><details><summary>Thinking</summary><pre>...</pre></details></div>
 function ThinkingRow({ log }: { log: LogEntry }) {
   const body = log.message.replace(/^\[AI (Request|Response)\]\s*/, '').trim();
-  const [isOpen, setIsOpen] = useState(true);
-
   return (
-    <div style={{ margin: '1px 0', paddingLeft: '8px' }}>
-      <details open={isOpen} onToggle={(e) => setIsOpen((e.target as HTMLDetailsElement).open)}>
-        <summary style={{
-          display: 'flex', alignItems: 'center', gap: '6px',
-          padding: '3px 8px 3px 2px',
-          cursor: 'pointer', userSelect: 'none',
-          fontFamily: 'var(--font-mono)', fontSize: '11px',
-          color: 'var(--text-muted)', fontStyle: 'italic',
-          listStyle: 'none',
-        }}>
-          {/* Custom Chevron Indicator */}
-          <span style={{
-            display: 'inline-flex',
-            transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
-            transition: 'transform 0.15s ease',
-            color: 'var(--text-muted)',
-            flexShrink: 0
-          }}>
-            <ChevronRight size={10} />
-          </span>
-
-          <Brain size={11} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-          <span>Thinking</span>
-          <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--text-muted)', flexShrink: 0 }}>
-            {log.timestamp}
-          </span>
-        </summary>
-        <pre style={{
-          margin: '0 0 0 16px', padding: '4px 8px',
-          fontFamily: 'var(--font-mono)', fontSize: '11px',
-          color: 'var(--text-muted)', whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word', lineHeight: '1.5',
-          background: 'rgba(0,0,0,0.1)', borderRadius: '3px',
-        }}>
-          {body}
-        </pre>
+    <div className="thinking-row">
+      <details>
+        <summary>Thinking</summary>
+        <pre>{body}</pre>
       </details>
     </div>
   );
 }
 
-// ── StreamGroup — SNS IDE stream chunks collected under a single Thinking block
-
+// ── StreamBlock — exact SNS IDE theia-thinking pattern for streaming AI text ─
 function StreamBlock({ group }: { group: StreamGroup }) {
   const text = group.chunks.map(c => c.message).join('');
-  const [isOpen, setIsOpen] = useState(true);
-
   return (
-    <div style={{ margin: '1px 0', paddingLeft: '8px' }}>
-      <details open={isOpen} onToggle={(e) => setIsOpen((e.target as HTMLDetailsElement).open)}>
-        <summary style={{
-          display: 'flex', alignItems: 'center', gap: '6px',
-          padding: '3px 8px 3px 2px', cursor: 'pointer', userSelect: 'none',
-          fontFamily: 'var(--font-mono)', fontSize: '11px',
-          color: 'var(--text-muted)', fontStyle: 'italic', listStyle: 'none',
-        }}>
-          {/* Custom Chevron Indicator */}
-          <span style={{
-            display: 'inline-flex',
-            transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)',
-            transition: 'transform 0.15s ease',
-            color: 'var(--text-muted)',
-            flexShrink: 0
-          }}>
-            <ChevronRight size={10} />
-          </span>
-
-          <Brain size={11} className="spin" style={{ color: 'var(--accent-blue)', flexShrink: 0 }} />
-          <span>Thinking</span>
-        </summary>
-        <pre style={{
-          margin: '0 0 0 16px', padding: '4px 8px',
-          fontFamily: 'var(--font-mono)', fontSize: '11px',
-          color: 'var(--text-muted)', whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word', lineHeight: '1.5',
-          background: 'rgba(0,0,0,0.1)', borderRadius: '3px',
-        }}>
-          {text}
-        </pre>
+    <div className="thinking-row">
+      <details>
+        <summary>Thinking</summary>
+        <pre>{text}</pre>
       </details>
     </div>
   );
 }
 
-// ── TodoRow ────────────────────────────────────────────────────────────────────
-
+// ── TodoRow ───────────────────────────────────────────────────────────────────
 function TodoRow({ log }: { log: LogEntry }) {
   const body = log.message.replace('[Todo]', '').trim();
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: '8px',
-      padding: '2px 8px 2px 10px', margin: '1px 0',
-      borderLeft: '2px solid rgba(220,196,80,0.4)',
-    }}>
-      <ListTodo size={11} style={{ color: '#dcc450', flexShrink: 0 }} />
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#dcc450' }}>{body}</span>
-      <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--text-muted)', flexShrink: 0 }}>
-        {log.timestamp}
-      </span>
+    <div className="todo-row">
+      <span className="todo-row__icon"><ListTodo size={11} /></span>
+      <span className="todo-row__text">{body}</span>
+      <span className="todo-row__time">{log.timestamp}</span>
     </div>
   );
 }
 
-// ── PhaseRow ───────────────────────────────────────────────────────────────────
-
+// ── PhaseRow ──────────────────────────────────────────────────────────────────
 function PhaseRow({ log }: { log: LogEntry }) {
-  const isComplete = log.level === 'success' || log.message.includes('complete') || log.message.includes('🎉');
-  const clean = log.message.replace(/^[🚀🎉✅⚠️❌]\s*/u, '').trim();
+  const isComplete = log.level === 'success' || log.message.includes('complete');
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: '8px',
-      padding: '4px 8px 4px 10px', margin: '2px 0',
-      background: isComplete ? 'rgba(78,201,176,0.06)' : 'rgba(86,156,214,0.06)',
-      borderLeft: `2px solid ${isComplete ? '#4ec9b0' : '#569cd6'}`,
-    }}>
-      {isComplete ? (
-        <Check size={11} style={{ color: '#4ec9b0', flexShrink: 0 }} />
-      ) : (
-        <Loader2 size={11} className="spin" style={{ color: '#569cd6', flexShrink: 0 }} />
-      )}
-      <span style={{
-        fontFamily: 'var(--font-mono)', fontSize: '11px',
-        color: isComplete ? '#4ec9b0' : '#569cd6', fontWeight: 600,
-      }}>{clean}</span>
-      <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'var(--text-muted)', flexShrink: 0 }}>
-        {log.timestamp}
+    <div className={`phase-row ${isComplete ? 'phase-row--complete' : 'phase-row--active'}`}>
+      <span className="phase-row__icon">
+        {isComplete
+          ? <Check size={11} />
+          : <Loader2 size={11} className="spin" />
+        }
       </span>
+      <span className={`phase-row__text ${isComplete ? 'phase-row__text--complete' : 'phase-row__text--active'}`}>
+        {log.message}
+      </span>
+      <span className="phase-row__time">{log.timestamp}</span>
     </div>
   );
 }
 
-// ── GenericRow ─────────────────────────────────────────────────────────────────
-
+// ── GenericRow — with [Tag] badge ─────────────────────────────────────────────
 function GenericRow({ log }: { log: LogEntry }) {
-  const cfg: Record<LogLevel, { color: string; icon: React.ReactNode }> = {
-    success: { color: '#4ec9b0', icon: <Check size={12} style={{ color: '#4ec9b0' }} /> },
-    error:   { color: '#f48771', icon: <AlertCircle size={12} style={{ color: '#f48771' }} /> },
-    warning: { color: '#cca700', icon: <AlertTriangle size={12} style={{ color: '#cca700' }} /> },
-    command: { color: '#dcdcaa', icon: <ChevronRight size={12} style={{ color: '#dcdcaa' }} /> },
-    info:    { color: 'var(--text-secondary)', icon: <Info size={12} style={{ color: 'var(--text-info)', opacity: 0.8 }} /> },
+  const iconMap: Record<LogLevel, React.ReactNode> = {
+    success: <Check      size={12} style={{ color: 'var(--text-success)' }} />,
+    error:   <AlertCircle   size={12} style={{ color: 'var(--text-error)' }} />,
+    warning: <AlertTriangle size={12} style={{ color: 'var(--text-warning)' }} />,
+    command: <ChevronRight  size={12} style={{ color: 'var(--accent-yellow)' }} />,
+    info:    <Info          size={12} style={{ color: 'var(--text-info)', opacity: 0.8 }} />,
   };
-  const { color, icon } = cfg[log.level] ?? cfg.info;
-  const clean = log.message.replace(/^[✅❌⚠️🔧📋🎉🚀]\s*/u, '').trim();
+
+  const parsed = parseTagPrefix(log.message);
+  const icon   = iconMap[log.level] ?? iconMap.info;
+
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '2px 8px', margin: '1px 0' }}>
-      <span style={{ color: 'var(--text-muted)', fontSize: '10px', flexShrink: 0, minWidth: '56px' }}>
-        {log.timestamp}
-      </span>
-      <span style={{ display: 'flex', alignItems: 'center', height: '18px', flexShrink: 0 }}>{icon}</span>
-      <span style={{ fontSize: '11px', color, flex: 1, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-        {clean}
+    <div className="log-row">
+      <span className="log-row__time">{log.timestamp}</span>
+      <span className="log-row__icon">{icon}</span>
+      <span className="log-row__body">
+        {/* Colored tag badge — only when [Tag] prefix detected */}
+        {parsed && (
+          <span className={`log-tag ${parsed.tagClass}`}>{parsed.tag}</span>
+        )}
+        <span className={`log-row__msg log-row__msg--${log.level}`}>
+          {parsed ? parsed.body : log.message}
+        </span>
       </span>
     </div>
   );
 }
 
 // ── Main TerminalPanel ─────────────────────────────────────────────────────────
-
 export default function TerminalPanel({ logs, isRunning, height }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -438,18 +358,15 @@ export default function TerminalPanel({ logs, isRunning, height }: Props) {
   const blocks = groupLogs(logs);
 
   return (
-    <div className="bottom-panel" style={{ height: height ? `${height}px` : undefined }}>
+    <div className="bottom-panel" style={height ? { height: `${height}px` } : undefined}>
       {/* Tab bar */}
       <div className="bottom-panel__tabs">
         <div className="bottom-panel__tab active">Terminal</div>
         <div className="bottom-panel__tab">Output</div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, paddingRight: 8 }}>
           {isRunning && (
-            <span style={{ fontSize: 11, color: 'var(--text-success)', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{
-                width: 6, height: 6, background: 'var(--text-success)',
-                borderRadius: '50%', display: 'inline-block', animation: 'blink 1s infinite',
-              }} />
+            <span className="terminal-running-label">
+              <span className="terminal-running-dot" />
               Running
             </span>
           )}
@@ -462,10 +379,7 @@ export default function TerminalPanel({ logs, isRunning, height }: Props) {
       {/* Log body */}
       <div className="terminal" style={{ padding: '4px 0' }}>
         {logs.length === 0 ? (
-          <div style={{
-            color: 'var(--text-muted)', padding: '8px 12px',
-            fontFamily: 'var(--font-mono)', fontSize: '11px',
-          }}>
+          <div className="terminal-empty">
             Ready. Upload a project and click Start Migration.
           </div>
         ) : (
