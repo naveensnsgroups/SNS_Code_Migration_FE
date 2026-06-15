@@ -12,6 +12,8 @@ interface Props {
   hasProject: boolean;
   width?: number;
   planPhaseDone?: boolean;
+  modernFileTree?: FileNode[];       // Output directory tree from @parcel/watcher refresh
+  modernFolderBasename?: string;     // Display name for the output folder (e.g. "Demo-5")
 }
 
 interface FileNode {
@@ -83,7 +85,7 @@ function FileItem({
   );
 }
 
-export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, onUpload, hasProject, width, planPhaseDone }: Props) {
+export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, onUpload, hasProject, width, planPhaseDone, modernFileTree = [], modernFolderBasename }: Props) {
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     const items = e.dataTransfer.items;
@@ -183,7 +185,7 @@ export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, on
             {fileTree.length > 0 && (
               <>
                 <div className="file-tree__section-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  {getFolderIcon(false)} Legacy Project
+                  {getFolderIcon(false)} {fileTree[0]?.name || 'Project'}
                 </div>
                 {fileTree.map((node) => (
                   <FileItem
@@ -196,29 +198,25 @@ export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, on
                 ))}
               </>
             )}
-            {planPhaseDone && (
+            {/* ── Output Tree (SNS IDE: Navigator pattern — same FileItem widget) ── */}
+            {modernFileTree.length > 0 && (
               <div style={{ marginTop: '16px' }}>
-                <div className="file-tree__section-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  {getFolderIcon(false)} Stage-1 Reports
-                </div>
                 <div
-                  className={`file-tree__item file-tree__item--file ${selectedFile === 'Stage1_Analysis.md' ? 'selected' : ''}`}
-                  style={{ paddingLeft: '4px', cursor: 'pointer' }}
-                  onClick={() => onSelectFile('Stage1_Analysis.md')}
+                  className="file-tree__section-label"
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
                 >
-                  <span className="file-tree__toggle-placeholder" />
-                  <span className="file-tree__item-icon">{getFileIcon('Stage1_Analysis.md')}</span>
-                  <span className="file-tree__item-name">Stage1_Analysis.md</span>
+                  {getFolderIcon(false)}
+                  {modernFolderBasename || 'Output'}
                 </div>
-                <div
-                  className={`file-tree__item file-tree__item--file ${selectedFile === 'migration-plan.md' ? 'selected' : ''}`}
-                  style={{ paddingLeft: '4px', cursor: 'pointer' }}
-                  onClick={() => onSelectFile('migration-plan.md')}
-                >
-                  <span className="file-tree__toggle-placeholder" />
-                  <span className="file-tree__item-icon">{getFileIcon('migration-plan.md')}</span>
-                  <span className="file-tree__item-name">migration-plan.md</span>
-                </div>
+                {modernFileTree.map((node) => (
+                  <FileItem
+                    key={node.path}
+                    node={node}
+                    depth={0}
+                    selectedFile={selectedFile}
+                    onSelect={onSelectFile}
+                  />
+                ))}
               </div>
             )}
           </div>

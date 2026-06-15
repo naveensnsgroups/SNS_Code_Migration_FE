@@ -19,30 +19,45 @@ import type { LiveStatusData } from './types';
 // ── Status config ─────────────────────────────────────────────────────────────
 
 const STATUS_TEXT: Record<MigrationStatus, string> = {
-  idle:      'Ready',
-  scanning:  'Scanning',
-  planning:  'Running',
-  complete:  'Complete',
-  error:     'Error',
-  paused:    'Paused',
+  idle:               'Ready',
+  scanning:           'Scanning',
+  planning:           'Running',
+  discovery:          'Discovery',
+  'file-analysis':    'File Analysis',
+  'graph-resolution': 'Graph Resolution',
+  'section-writing':  'Writing Sections',
+  assembly:           'Assembly',
+  complete:           'Complete',
+  error:              'Error',
+  paused:             'Paused',
 };
 
 const DOT_CLASS: Record<MigrationStatus, string> = {
-  idle:      'ls-overlay__dot--idle',
-  scanning:  'ls-overlay__dot--scanning',
-  planning:  'ls-overlay__dot--running',
-  complete:  'ls-overlay__dot--complete',
-  error:     'ls-overlay__dot--error',
-  paused:    'ls-overlay__dot--paused',
+  idle:               'ls-overlay__dot--idle',
+  scanning:           'ls-overlay__dot--scanning',
+  planning:           'ls-overlay__dot--running',
+  discovery:          'ls-overlay__dot--running',
+  'file-analysis':    'ls-overlay__dot--running',
+  'graph-resolution': 'ls-overlay__dot--running',
+  'section-writing':  'ls-overlay__dot--running',
+  assembly:           'ls-overlay__dot--running',
+  complete:           'ls-overlay__dot--complete',
+  error:              'ls-overlay__dot--error',
+  paused:             'ls-overlay__dot--paused',
 };
 
 const BADGE_CLASS: Record<MigrationStatus, string> = {
-  idle:      'ls-overlay__badge--idle',
-  scanning:  'ls-overlay__badge--scanning',
-  planning:  'ls-overlay__badge--running',
-  complete:  'ls-overlay__badge--complete',
-  error:     'ls-overlay__badge--error',
-  paused:    'ls-overlay__badge--paused',
+  idle:               'ls-overlay__badge--idle',
+  scanning:           'ls-overlay__badge--scanning',
+  planning:           'ls-overlay__badge--running',
+  discovery:          'ls-overlay__badge--running',
+  'file-analysis':    'ls-overlay__badge--running',
+  'graph-resolution': 'ls-overlay__badge--running',
+  'section-writing':  'ls-overlay__badge--running',
+  assembly:           'ls-overlay__badge--running',
+  complete:           'ls-overlay__badge--complete',
+  error:              'ls-overlay__badge--error',
+  paused:             'ls-overlay__badge--paused',
 };
 
 // ── Sub-components ────────────────────────────────────────────────────────────

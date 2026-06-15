@@ -4,6 +4,11 @@ export type MigrationStatus =
   | 'idle'
   | 'scanning'
   | 'planning'
+  | 'discovery'
+  | 'file-analysis'
+  | 'graph-resolution'
+  | 'section-writing'
+  | 'assembly'
   | 'complete'
   | 'error'
   | 'paused';
@@ -118,6 +123,10 @@ export const AI_PROVIDERS: Record<AIProvider, { label: string }> = {
 };
 
 export const MIGRATION_PHASES: MigrationPhase[] = [
-  { id: 'scan',       label: 'Scan Codebase',         status: 'pending' },
-  { id: 'plan',       label: 'Generate Plan',          status: 'pending' },
+  { id: 'scan',             label: 'Stack Detection',   status: 'pending' },
+  { id: 'discovery',        label: 'Discovery',         status: 'pending' },
+  { id: 'file-analysis',    label: 'File Analysis',     status: 'pending' },
+  { id: 'graph-resolution', label: 'Graph Resolution',  status: 'pending' },
+  { id: 'section-writing',  label: 'Section Writing',   status: 'pending' },
+  { id: 'assembly',         label: 'Assembly',          status: 'pending' },
 ];

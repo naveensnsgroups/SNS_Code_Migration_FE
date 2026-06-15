@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { X, Sparkles } from 'lucide-react';
+import { X, Sparkles, Download } from 'lucide-react';
 import { getFileIcon } from '../utils/labelProvider';
 
 interface Props {
@@ -10,6 +10,7 @@ interface Props {
   legacyFile: string | null;
   modernFile: string | null;
   onClose?: () => void;
+  onDownload?: (fileName: string) => void;
 }
 
 function CodeBlock({ code, language }: { code: string; language?: string }) {
@@ -56,7 +57,11 @@ function highlightLine(line: string): React.ReactNode {
   });
 }
 
-export default function CodeViewer({ legacyCode, modernCode, legacyFile, modernFile, onClose }: Props) {
+const DOWNLOADABLE_FILES = ['Stage1_Analysis.md', 'migration-plan.md'];
+
+export default function CodeViewer({ legacyCode, modernCode, legacyFile, modernFile, onClose, onDownload }: Props) {
+  const fileName = legacyFile?.split('/').pop() ?? legacyFile ?? '';
+  const isDownloadable = DOWNLOADABLE_FILES.includes(fileName) && !!onDownload;
   if (!legacyCode && !modernCode) {
     return (
       <div className="editor-area">
@@ -91,6 +96,16 @@ export default function CodeViewer({ legacyCode, modernCode, legacyFile, modernF
           <div className="editor-tab active">
             <span className="editor-tab__icon">{getFileIcon(legacyFile)}</span>
             <span className="editor-tab__name">{legacyFile.split('/').pop() ?? legacyFile}</span>
+            {isDownloadable && (
+              <button
+                className="editor-tab__close"
+                onClick={() => onDownload!(fileName)}
+                title={`Download ${fileName}`}
+                style={{ color: 'var(--text-success)' }}
+              >
+                <Download size={12} />
+              </button>
+            )}
             {onClose && (
               <button
                 className="editor-tab__close"
