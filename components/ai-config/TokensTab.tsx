@@ -81,12 +81,15 @@ export default function TokensTab({
     fetchFromBackend();
   }, [fetchFromBackend]);
 
-  // When live SSE tokenUsage updates, fetch fresh breakdown in real-time
+  // When live SSE tokenUsage updates, fetch fresh breakdown in real-time.
+  // Depend on the primitive totalTokens value — NOT the tokenUsage object itself.
+  // The parent creates a new tokenUsage object every render; using it as a dep
+  // would trigger this effect on every render, causing an infinite update loop.
   useEffect(() => {
     if (tokenUsage && tokenUsage.totalTokens > 0) {
       fetchFromBackend();
     }
-  }, [tokenUsage, fetchFromBackend]);
+  }, [tokenUsage?.totalTokens, fetchFromBackend]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hasData = modelBreakdown.length > 0;
 
