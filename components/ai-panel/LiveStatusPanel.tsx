@@ -33,30 +33,45 @@ interface Props {
 // ── Status Display Map ────────────────────────────────────────────────────────
 
 const STATUS_TEXT: Record<MigrationStatus, string> = {
-  idle:      'Ready',
-  scanning:  'Scanning',
-  planning:  'Running',
-  complete:  'Complete',
-  error:     'Error',
-  paused:    'Paused',
+  idle:               'Ready',
+  scanning:           'Scanning',
+  planning:           'Running',
+  discovery:          'Discovery',
+  'file-analysis':    'File Analysis',
+  'graph-resolution': 'Graph Resolution',
+  'section-writing':  'Writing Sections',
+  assembly:           'Assembly',
+  complete:           'Complete',
+  error:              'Error',
+  paused:             'Paused',
 };
 
 const STATUS_DOT: Record<MigrationStatus, string> = {
-  idle:      'live-status__dot--idle',
-  scanning:  'live-status__dot--scanning',
-  planning:  'live-status__dot--running',
-  complete:  'live-status__dot--complete',
-  error:     'live-status__dot--error',
-  paused:    'live-status__dot--paused',
+  idle:               'live-status__dot--idle',
+  scanning:           'live-status__dot--scanning',
+  planning:           'live-status__dot--running',
+  discovery:          'live-status__dot--running',
+  'file-analysis':    'live-status__dot--running',
+  'graph-resolution': 'live-status__dot--running',
+  'section-writing':  'live-status__dot--running',
+  assembly:           'live-status__dot--running',
+  complete:           'live-status__dot--complete',
+  error:              'live-status__dot--error',
+  paused:             'live-status__dot--paused',
 };
 
 const STATUS_BADGE: Record<MigrationStatus, string> = {
-  idle:      'live-status__badge--idle',
-  scanning:  'live-status__badge--scanning',
-  planning:  'live-status__badge--running',
-  complete:  'live-status__badge--complete',
-  error:     'live-status__badge--error',
-  paused:    'live-status__badge--paused',
+  idle:               'live-status__badge--idle',
+  scanning:           'live-status__badge--scanning',
+  planning:           'live-status__badge--running',
+  discovery:          'live-status__badge--running',
+  'file-analysis':    'live-status__badge--running',
+  'graph-resolution': 'live-status__badge--running',
+  'section-writing':  'live-status__badge--running',
+  assembly:           'live-status__badge--running',
+  complete:           'live-status__badge--complete',
+  error:              'live-status__badge--error',
+  paused:             'live-status__badge--paused',
 };
 
 // ── Log Parsing Utilities ─────────────────────────────────────────────────────

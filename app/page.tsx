@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useState } from 'react';
-import { Files, Search, Bot, Settings, Zap, Terminal, Wrench, Database } from 'lucide-react';
+import { useCallback, useState, useEffect, useRef } from 'react';
+import { Files, Search, Bot, Settings, Zap, Terminal, Wrench, Database, DollarSign } from 'lucide-react';
 import ExplorerPanel  from '@/components/ExplorerPanel';
 import CodeViewer     from '@/components/CodeViewer';
 import AIPanel        from '@/components/AIPanel';
@@ -9,20 +9,27 @@ import TerminalPanel  from '@/components/TerminalPanel';
 import SearchPanel    from '@/components/SearchPanel';
 import SettingsTab    from '@/components/SettingsTab';
 import AIConfigTab    from '@/components/AIConfigTab';
+import { NotificationBell } from '@/components/notifications/NotificationCenter';
 import { useMigration }  from '@/hooks/useMigration';
 import { usePanelResize } from '@/hooks/useResize';
 import { useBackendUrl }  from '@/hooks/useSettings';
+import { useNotifications } from '@/context/NotificationContext';
 import type { MigrationStatus, TargetStack } from '@/types';
 
 // ── Status Label Map ───────────────────────────────────────────────────────────
 
 const STATUS_LABEL: Record<MigrationStatus, string> = {
-  idle:       'Ready',
-  scanning:   'Scanning...',
-  planning:   'Planning...',
-  complete:   'Complete ✅',
-  error:      'Error ❌',
-  paused:     'Paused ⏸',
+  idle:               'Ready',
+  scanning:           'Scanning...',
+  planning:           'Planning...',
+  discovery:          'Discovery...',
+  'file-analysis':    'File Analysis...',
+  'graph-resolution': 'Graph Resolution...',
+  'section-writing':  'Writing Sections...',
+  assembly:           'Assembly...',
+  complete:           'Complete ✅',
+  error:              'Error ❌',
+  paused:             'Paused ⏸',
 };
 
 // ── Page ───────────────────────────────────────────────────────────────────────
@@ -43,15 +50,48 @@ export default function HomePage() {
   const [aiPanelWidth,    startResizeAiPanel]    = usePanelResize(300,  200, 600, 'x', true);
   const [terminalHeight,  startResizeTerminal]   = usePanelResize(220,  80,  600, 'y', true);
 
+  // ── Notification system (must be before useMigration) ──────────────────────
+  const { notify } = useNotifications();
+  const prevStatusRef = useRef<MigrationStatus>('idle');
+
   // ── Migration state + handlers ─────────────────────────────────────────────
   const {
     status, sessionId, fileTree, detectedStack,
     selectedFile, legacyCode, modernCode,
     logs, progress, currentFile, phases,
+    modernFileTree, modernFolderBasename,
     tokenUsage, isRunning, hasProject, planPhaseDone,
     activeTool,
     handleUpload, handleStart, handleStop, handlePause, handleSelectFile, clearSelectedFile,
-  } = useMigration(backendUrl, settingsTrigger);
+    handleDownload,
+  } = useMigration(backendUrl, settingsTrigger, notify);
+
+  // Fire notifications on status transitions (SNS IDE MessageService pattern)
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    if (prev === status) return;
+    prevStatusRef.current = status;
+
+    switch (status) {
+      case 'scanning':
+        notify({ type: 'info', message: 'Stage-1 Analysis started…' });
+        break;
+      case 'complete':
+        notify({ type: 'success', message: 'Stage-1 Analysis complete! View Stage1_Analysis.md in Explorer.', timeout: 8000 });
+        break;
+      case 'error':
+        notify({ type: 'error', message: 'Pipeline error — check the Terminal for details.', persistent: true });
+        break;
+      case 'paused':
+        notify({ type: 'warning', message: 'Migration paused. Click Resume to continue.' });
+        break;
+      case 'idle':
+        if (prev === 'planning' || prev === 'scanning') {
+          notify({ type: 'warning', message: 'Migration stopped by user.' });
+        }
+        break;
+    }
+  }, [status, notify]);
 
   // ── Settings saved callback ───────────────────────────────────────────────
   const handleSettingsSaved = useCallback(() => {
@@ -134,6 +174,8 @@ export default function HomePage() {
             hasProject={hasProject}
             width={sidebarWidth}
             planPhaseDone={planPhaseDone}
+            modernFileTree={modernFileTree}
+            modernFolderBasename={modernFolderBasename}
           />
         )}
         {sidebarOpen && activeTab === 'search' && (
@@ -170,6 +212,7 @@ export default function HomePage() {
             legacyFile={selectedFile}
             modernFile={selectedFile ?? null}
             onClose={clearSelectedFile}
+            onDownload={handleDownload}
           />
         )}
 
@@ -228,6 +271,16 @@ export default function HomePage() {
           {STATUS_LABEL[status]}
         </span>
         {isRunning && <span className="status-bar__item">{progress}%</span>}
+        {tokenUsage && tokenUsage.estimatedCost > 0 && (
+          <span className="status-bar__item" style={{ gap: '4px', color: 'var(--text-success)' }}>
+            <DollarSign size={11} />
+            {tokenUsage.estimatedCost < 0.01
+              ? '<$0.01'
+              : `$${tokenUsage.estimatedCost.toFixed(4)}`}
+          </span>
+        )}
+        {/* Notification Bell — SNS IDE status bar bell pattern */}
+        <NotificationBell />
       </footer>
     </div>
   );

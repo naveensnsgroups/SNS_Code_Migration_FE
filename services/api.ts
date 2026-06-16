@@ -233,8 +233,7 @@ export async function fetchTools(backendUrl: string): Promise<ToolsResponse> {
 
 /**
  * Fetch persisted token usage from session.json for a session.
- * GET /api/migrate/tokens?sessionId=...
- * Used to hydrate the Token Usage tab on load/page refresh.
+ * GET /api/migrate/tokens?sessionId=...\n * Used to hydrate the Token Usage tab on load/page refresh.
  */
 export async function fetchSessionTokens(
   backendUrl: string,
@@ -245,4 +244,28 @@ export async function fetchSessionTokens(
   );
   if (!res.ok) throw new Error('Failed to load session tokens');
   return res.json() as Promise<SessionTokensResponse>;
+}
+
+/**
+ * Trigger browser download of a file from the modern workspace.
+ * GET /api/file/download?sessionId=...&file=Stage1_Analysis.md
+ */
+export function downloadFile(backendUrl: string, sessionId: string, fileName: string): void {
+  const url = `${backendUrl}/api/file/download?sessionId=${encodeURIComponent(sessionId)}&file=${encodeURIComponent(fileName)}`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+/**
+ * Fetch list of all sessions from the backend.
+ * GET /api/config/sessions
+ */
+export async function fetchSessionList(backendUrl: string): Promise<{ sessions: { sessionId: string; status: string; startedAt?: string }[] }> {
+  const res = await fetch(`${backendUrl}/api/config/sessions`);
+  if (!res.ok) return { sessions: [] };
+  return res.json();
 }

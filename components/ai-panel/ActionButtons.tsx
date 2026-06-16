@@ -11,8 +11,9 @@
 // =============================================================================
 'use client';
 
-import { Play, Pause, Square, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Play, Pause, Square, CheckCircle2 } from 'lucide-react';
 import type { MigrationStatus, DetectedStack } from '@/types';
+import { useNotifications } from '@/context/NotificationContext';
 
 interface Props {
   status:        MigrationStatus;
@@ -47,6 +48,17 @@ export default function ActionButtons({
     ? 'Select a model in Settings first'
     : '';
 
+  const { notify } = useNotifications();
+
+  // When user clicks while disabled — show warning toast (SNS IDE pattern)
+  const handleStartClick = () => {
+    if (!canStart) {
+      notify({ type: 'warning', message: disabledReason });
+      return;
+    }
+    onStart();
+  };
+
   return (
     <div style={{ marginTop: 'auto', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
 
@@ -55,8 +67,7 @@ export default function ActionButtons({
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <button
             className="btn-premium btn-premium--primary"
-            onClick={onStart}
-            disabled={!canStart}
+            onClick={handleStartClick}
             title={!canStart ? disabledReason : buttonLabel}
             style={{ opacity: canStart ? 1 : 0.45 }}
           >
@@ -64,7 +75,7 @@ export default function ActionButtons({
             <span>{isError ? 'Retry Analysis' : buttonLabel}</span>
           </button>
 
-          {/* Explain why disabled */}
+          {/* Explain why disabled — inline hint stays, toast fires on click */}
           {!canStart && disabledReason && (
             <div style={{
               display: 'flex', alignItems: 'center', gap: '5px',
@@ -72,7 +83,7 @@ export default function ActionButtons({
               background: 'rgba(204,167,0,0.08)', border: '1px solid rgba(204,167,0,0.2)',
               borderRadius: '4px', padding: '5px 8px'
             }}>
-              <AlertCircle size={11} />
+              <span style={{ fontSize: 11 }}>⚠️</span>
               <span>{disabledReason}</span>
             </div>
           )}

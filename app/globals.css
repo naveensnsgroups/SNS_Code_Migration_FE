@@ -2432,3 +2432,449 @@ body {
   0%   { transform: scale(0.8); opacity: 1; }
   100% { transform: scale(1.6); opacity: 0; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SNS IDE — Notification System
+   1:1 faithful port of:
+     packages/messages/src/browser/style/notifications.css
+   Using our design tokens from :root.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── SNS IDE color variables (mapped to our tokens) ─────────────────────── */
+:root {
+  --notifications-background:          var(--bg-secondary);
+  --notificationCenter-border:         var(--border-color);
+  --notificationToast-border:          var(--border-color);
+  --notificationCenterHeader-fg:       var(--text-secondary);
+  --notificationCenterHeader-bg:       var(--bg-tertiary);
+  --notifications-border:              var(--border-subtle);
+  --notifications-fg:                  var(--text-primary);
+  --notificationsInfoIcon-fg:          var(--text-info);        /* #9cdcfe */
+  --notificationsWarningIcon-fg:       var(--text-warning);     /* #cca700 */
+  --notificationsErrorIcon-fg:         var(--text-error);       /* #f48771 */
+  --notificationsSuccessIcon-fg:       var(--text-success);     /* #4ec9b0 */
+  --notificationLink-fg:               var(--accent-blue);
+  --notif-bell-dot-color:              var(--accent-blue);
+  --widget-shadow:                     rgba(0,0,0,0.36);
+}
+
+/* ── Overlay container (height:0 — SNS IDE pattern) ─────────────────────── */
+/* SNS IDE: .theia-notifications-overlay { height: 0px } */
+
+.theia-notifications-overlay {
+  height: 0;
+  position: relative;
+  z-index: 1111;
+}
+
+/* ── Shared container (used by both toasts + center) ─────────────────────── */
+/* SNS IDE: .theia-notifications-container {
+     position: absolute; bottom: 36px; right: 16px; width: 500px; z-index: 1111 } */
+
+.theia-notifications-container {
+  position: fixed;
+  bottom: 30px;          /* above our 22px status bar */
+  right: 16px;
+  width: 500px;
+  user-select: none;
+  z-index: 1111;
+}
+
+.theia-notifications-container.closed {
+  display: none;
+}
+
+/* ── Toasts container ────────────────────────────────────────────────────── */
+/* SNS IDE: .theia-notification-toasts .theia-notification-list-item-container */
+
+.theia-notifications-container.theia-notification-toasts
+  .theia-notification-list-item-container {
+  border-radius: 4px;
+  margin-top: 6px;
+  animation: sns-toast-in 0.2s ease forwards;
+}
+
+@keyframes sns-toast-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* SNS IDE: box-shadow + border on toast item */
+.theia-notifications-container.theia-notification-toasts
+  .theia-notification-list-item {
+  box-shadow: 0 0 8px 0 var(--widget-shadow);
+  border: 1px solid var(--notificationToast-border);
+  border-radius: 4px;
+}
+
+/* ── Notification Center ─────────────────────────────────────────────────── */
+/* SNS IDE: .theia-notification-center {
+     background: --notifications-background;
+     border: 1px solid --notificationCenter-border;
+     border-radius: 4px; overflow: hidden;
+     box-shadow: 0 0 6px 0 --widget-shadow } */
+
+.theia-notifications-container.theia-notification-center {
+  background: var(--notifications-background);
+  border: 1px solid var(--notificationCenter-border);
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 0 10px 0 var(--widget-shadow);
+  right: 0;
+}
+
+/* ── Center Header ───────────────────────────────────────────────────────── */
+/* SNS IDE: .theia-notification-center-header {
+     color: --notificationCenterHeader-fg;
+     background: --notificationCenterHeader-bg;
+     display: flex; flex-direction: row; flex-wrap: nowrap;
+     justify-content: flex-end; min-height: 30px; align-items: center } */
+
+.theia-notification-center-header {
+  color: var(--notificationCenterHeader-fg);
+  background: var(--notificationCenterHeader-bg);
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  min-height: 30px;
+  align-items: center;
+}
+
+/* SNS IDE: .theia-notification-center-header-title {
+     font-size: calc(13px / 1.1); font-family: ...; margin: 8px; flex-grow: 2 } */
+.theia-notification-center-header-title {
+  font-size: 11.8px;
+  font-family: var(--font-ui);
+  margin: 8px;
+  flex-grow: 2;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.theia-notification-center-header-actions {
+  margin: 8px;
+}
+
+/* ── Notification List ───────────────────────────────────────────────────── */
+/* SNS IDE: .theia-notification-list-scroll-container { max-height: 300px; overflow: auto } */
+
+.theia-notification-list-scroll-container {
+  max-height: 300px;
+  overflow-y: auto;
+  border-bottom-left-radius: 4px;
+  border-bottom-right-radius: 4px;
+}
+
+/* SNS IDE: .theia-notification-list { display: flex; flex-direction: column-reverse } */
+/* Note: column-reverse makes newest appear at bottom in SNS IDE.
+   Our history is already newest-first so we use column (normal order). */
+.theia-notification-list {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+}
+
+/* ── List Item ───────────────────────────────────────────────────────────── */
+/* SNS IDE: .theia-notification-list-item {
+     background: --notifications-background; width: 100%;
+     cursor: pointer; flex-grow: 1; display: flex; flex-direction: column } */
+
+.theia-notification-list-item {
+  background: var(--notifications-background);
+  width: 100%;
+  cursor: pointer;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  transition: background 0.12s;
+}
+
+.theia-notification-list-item:focus {
+  outline: 1px solid var(--accent-blue);
+  outline-offset: -1px;
+}
+
+.theia-notification-list-item:hover:not(:focus) {
+  background: var(--bg-hover);
+}
+
+/* Center items separated by top border */
+.theia-notification-center
+  .theia-notification-list-item:not(:last-child) {
+  border-top: 1px solid var(--notifications-border);
+}
+
+/* ── Item Content ────────────────────────────────────────────────────────── */
+/* SNS IDE: .theia-notification-list-item-content { margin: 6px; flex-grow: 3 } */
+
+.theia-notification-list-item-content {
+  margin: 6px;
+  flex-grow: 3;
+}
+
+.theia-notification-list-item-content-main {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  padding: 5px 4px 7px 4px;
+}
+
+/* ── Notification Icon ───────────────────────────────────────────────────── */
+/* SNS IDE: .theia-notification-icon { margin-top: 2px; margin-right: 6px }
+   icon colors from --theia-notificationsInfoIcon-foreground etc. */
+
+.theia-notification-icon {
+  margin-top: 2px;
+  margin-right: var(--theia-ui-padding, 6px);
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  line-height: 1;
+}
+
+.theia-notification-icon--info    { color: var(--notificationsInfoIcon-fg); }
+.theia-notification-icon--success { color: var(--notificationsSuccessIcon-fg); }
+.theia-notification-icon--warning { color: var(--notificationsWarningIcon-fg); }
+.theia-notification-icon--error   { color: var(--notificationsErrorIcon-fg); }
+
+/* ── Notification Message ────────────────────────────────────────────────── */
+/* SNS IDE: .theia-notification-message {
+     font-size: 13px; overflow-wrap: break-word;
+     flex-basis: 0; flex-grow: 1; flex-shrink: 1;
+     display: block; overflow: hidden; user-select: text; margin-top: 3px } */
+
+.theia-notification-message {
+  font-size: var(--theia-ui-font-size1, 13px);
+  font-family: var(--font-ui);
+  overflow-wrap: break-word;
+  word-break: break-word;
+  box-sizing: border-box;
+  flex-basis: 0%;
+  flex-grow: 1;
+  flex-shrink: 1;
+  display: block;
+  overflow: hidden;
+  user-select: text;
+  margin-top: 3px;
+  color: var(--notifications-fg);
+  line-height: 1.45;
+}
+
+/* ── Actions (close × etc.) ─────────────────────────────────────────────── */
+/* SNS IDE: .theia-notification-actions { display: flex; flex-direction: row } */
+/* SNS IDE: .theia-notification-actions > li { display: inline-block; height: 16px; width: 16px } */
+
+.theia-notification-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.theia-notification-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 16px;
+  width: 16px;
+  cursor: pointer;
+  margin-left: 4px;
+  color: var(--text-muted);
+  border-radius: 2px;
+  transition: color 0.12s, background 0.12s;
+  flex-shrink: 0;
+}
+
+.theia-notification-action-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255,255,255,0.08);
+}
+
+/* Text variant ("Mark read" button) */
+.theia-notification-action-btn--text {
+  width: auto;
+  padding: 0 6px;
+  font-size: 10px;
+  font-family: var(--font-ui);
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  height: 18px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.theia-notification-action-btn--text:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+/* ── Bottom row (source / timestamp) ────────────────────────────────────── */
+/* SNS IDE: .theia-notification-list-item-content-bottom { display: flex; justify-content: space-between } */
+
+.theia-notification-list-item-content-bottom {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+/* SNS IDE: .theia-notification-source { font-size: font-size0; overflow-wrap: break-word } */
+.theia-notification-source {
+  font-size: 10.8px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  padding: 2px 4px 4px;
+}
+
+/* ── Unread highlight ────────────────────────────────────────────────────── */
+.theia-notification-item--unread .theia-notification-list-item {
+  background: rgba(0, 122, 204, 0.05);
+}
+
+/* Left accent stripe per type (inside notification center items) */
+.theia-notification-center
+  .theia-notification-list-item-container {
+  position: relative;
+}
+.theia-notification-center
+  .theia-notification-list-item-container::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 3px;
+}
+/* These are set via the data attribute on the container — but we use classes */
+.theia-notification-center
+  .theia-notification-list-item-container:has(.theia-notification-icon--info)::before    { background: var(--notificationsInfoIcon-fg); }
+.theia-notification-center
+  .theia-notification-list-item-container:has(.theia-notification-icon--success)::before { background: var(--notificationsSuccessIcon-fg); }
+.theia-notification-center
+  .theia-notification-list-item-container:has(.theia-notification-icon--warning)::before { background: var(--notificationsWarningIcon-fg); }
+.theia-notification-center
+  .theia-notification-list-item-container:has(.theia-notification-icon--error)::before   { background: var(--notificationsErrorIcon-fg); }
+
+/* Left accent on toasts too */
+.theia-notification-toasts
+  .theia-notification-list-item-container:has(.theia-notification-icon--info)
+  .theia-notification-list-item    { border-left: 3px solid var(--notificationsInfoIcon-fg); }
+.theia-notification-toasts
+  .theia-notification-list-item-container:has(.theia-notification-icon--success)
+  .theia-notification-list-item    { border-left: 3px solid var(--notificationsSuccessIcon-fg); }
+.theia-notification-toasts
+  .theia-notification-list-item-container:has(.theia-notification-icon--warning)
+  .theia-notification-list-item    { border-left: 3px solid var(--notificationsWarningIcon-fg); }
+.theia-notification-toasts
+  .theia-notification-list-item-container:has(.theia-notification-icon--error)
+  .theia-notification-list-item    { border-left: 3px solid var(--notificationsErrorIcon-fg); }
+
+/* ── Progress bar ────────────────────────────────────────────────────────── */
+/* SNS IDE: .theia-notification-item-progress { display: block }
+            .theia-notification-item-progressbar { height: 2px; background: --progressBar-background } */
+
+.theia-notification-item-progress {
+  display: block;
+}
+
+.theia-notification-item-progressbar {
+  height: 2px;
+  background: var(--accent-blue);
+  width: 100%;
+  border-radius: 0 0 4px 4px;
+}
+
+/* Auto-dismiss progress bar — shrinks from 100% → 0% */
+.theia-notification-item-progressbar--auto {
+  animation: sns-dismiss-bar linear forwards;
+}
+
+@keyframes sns-dismiss-bar {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+
+/* ── Empty state in center ───────────────────────────────────────────────── */
+.theia-notification-center-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font-ui);
+}
+
+.theia-notification-center-empty-icon {
+  font-size: 22px;
+  opacity: 0.4;
+}
+
+/* ── Bell button in Status Bar ───────────────────────────────────────────── */
+/* SNS IDE: status bar element, .element.hasCommand:hover, right-aligned
+   getStatusBarItemText: $(codicon-bell-dot) N  or  $(codicon-bell) */
+
+.theia-notification-bell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: inherit;  /* inherits status-bar color */
+  cursor: pointer;
+  padding: 0 6px;
+  height: var(--statusbar-height, 22px);
+  font-size: 12px;
+  font-family: var(--font-ui);
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+
+.theia-statusBar-element {
+  /* Matches SNS IDE status bar .element */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  height: var(--statusbar-height, 22px);
+  min-width: var(--statusbar-height, 22px);
+}
+
+.theia-notification-bell:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.theia-notification-bell.active {
+  background: rgba(0, 122, 204, 0.2);
+  color: #fff;
+}
+
+/* SNS IDE: notification count badge */
+.theia-notification-bell-count {
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* Scrollbar inside notification center */
+.theia-notification-list-scroll-container::-webkit-scrollbar {
+  width: 6px;
+}
+.theia-notification-list-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+.theia-notification-list-scroll-container::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb, #424242);
+  border-radius: 3px;
+}

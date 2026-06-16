@@ -31,7 +31,9 @@ import {
   fetchFileContent,
   fetchModernTree,
   fetchSessionTokens,
+  downloadFile,
 } from '@/services/api';
+
 import { readSettings } from '@/hooks/useSettings';
 import { useSSE, SSEEventPayload } from '@/hooks/useSSE';
 
@@ -107,13 +109,15 @@ export interface UseMigrationReturn {
   handlePause: () => Promise<void>;
   handleSelectFile: (path: string, setActiveEditorTab: (t: 'code' | 'settings' | 'aiconfig') => void) => Promise<void>;
   clearSelectedFile: () => void;
+  handleDownload: (fileName: string) => void;
 }
 
 // ── Main Hook ─────────────────────────────────────────────────────────────────
 
 export function useMigration(
   backendUrl: string,
-  settingsTrigger: number
+  settingsTrigger: number,
+  onNotify?: (opts: { type: 'info' | 'success' | 'warning' | 'error'; message: string; persistent?: boolean }) => void
 ): UseMigrationReturn {
   const [status, setStatus]               = useState<MigrationStatus>('idle');
   const [sessionId, setSessionId]         = useState<string | null>(null);
@@ -131,9 +135,10 @@ export function useMigration(
   const [tokenUsage, setTokenUsage]       = useState<TokenUsage | null>(null);
   const [activeTool, setActiveTool]       = useState<{ name: string; args: string } | null>(null);
 
-  const isRunning     = ['scanning', 'planning'].includes(status);
+  const isRunning     = ['scanning', 'planning', 'discovery', 'file-analysis', 'graph-resolution', 'section-writing', 'assembly'].includes(status);
   const hasProject    = fileTree.length > 0;
-  const planPhaseDone = phases.find(p => p.id === 'plan')?.status === 'done';
+  // Stage 1 is done when the assembly phase is marked done
+  const planPhaseDone = phases.find(p => p.id === 'assembly')?.status === 'done';
 
   // ── Log helper ──────────────────────────────────────────────────────────────
   const addLog = useCallback((message: string, level: LogEntry['level'] = 'info', phase?: string) => {
@@ -154,6 +159,24 @@ export function useMigration(
       setModernFileTree([]);
     }
   }, [backendUrl]);
+
+  // Persist sessionId to localStorage so page refresh restores session
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (sessionId) {
+      localStorage.setItem('last_session_id', sessionId);
+    }
+  }, [sessionId]);
+
+  // Restore sessionId on mount from localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const saved = localStorage.getItem('last_session_id');
+    if (saved && !sessionId) {
+      setSessionId(saved);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Refresh modern tree whenever session changes
   useEffect(() => {
@@ -196,6 +219,13 @@ export function useMigration(
       case 'tool_response':
         // Tool finished — clear active tool immediately
         setActiveTool(null);
+        break;
+
+      case 'file_tree_changed':
+        // @parcel/watcher (BE) detected file CREATED/UPDATED/DELETED in modernPath.
+        // SNS IDE equivalent: onDidFilesChanged → Navigator tree re-reads directory.
+        // Refresh immediately — no debounce needed here (BE already debounces 300ms).
+        if (sessionId) refreshModernTree(sessionId);
         break;
 
       case 'log':
@@ -248,6 +278,11 @@ export function useMigration(
           if (payload.detectedStack) {
             addLog(`Scanned ${payload.detectedStack.fileCount} files`, 'success');
             addLog(`Detected: ${payload.detectedStack.language} / ${payload.detectedStack.framework} / ${payload.detectedStack.database}`, 'info');
+            // → Notify upload success (SNS IDE MessageService.info pattern)
+            onNotify?.({
+              type: 'info',
+              message: `Project loaded: ${payload.detectedStack.fileCount} files · ${payload.detectedStack.language} / ${payload.detectedStack.framework}`,
+            });
           }
         } else {
           setStatus('complete');
@@ -263,6 +298,12 @@ export function useMigration(
         setActiveTool(null);
         setStatus('error');
         addLog(event.data.message as string, 'error');
+        // → Notify error (SNS IDE MessageService.error pattern)
+        onNotify?.({
+          type: 'error',
+          message: `Pipeline error: ${event.data.message as string}`,
+          persistent: true,
+        });
         closeSSE();
         break;
 
@@ -351,7 +392,7 @@ export function useMigration(
     setStatus('scanning');
     setProgress(0);
     setPhases(prev => prev.map(p => {
-      if (p.id === 'scan' || (p.id === 'plan' && planPhaseDone)) return { ...p, status: 'done' };
+      if (p.id === 'scan') return { ...p, status: 'done' };
       return { ...p, status: 'pending' };
     }));
     addLog('Starting migration...', 'command');
@@ -436,6 +477,12 @@ export function useMigration(
     setModernCode(null);
   }, []);
 
+  // ── Download helper ─────────────────────────────────────────────────────────
+  const handleDownload = useCallback((fileName: string) => {
+    if (!sessionId) return;
+    downloadFile(backendUrl, sessionId, fileName);
+  }, [sessionId, backendUrl]);
+
   return {
     status, sessionId, fileTree, detectedStack, selectedFile,
     legacyCode, modernCode, logs, progress, currentFile, phases,
@@ -443,5 +490,6 @@ export function useMigration(
     isRunning, hasProject, planPhaseDone,
     activeTool,
     handleUpload, handleStart, handleStop, handlePause, handleSelectFile, clearSelectedFile,
+    handleDownload,
   };
 }
