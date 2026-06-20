@@ -48,7 +48,7 @@ export interface TargetStack {
   outputMode: 'direct' | 'suggest';
 }
 
-export type AIProvider = 'anthropic' | 'openai' | 'google' | 'grok' | 'groq' | 'openrouter' | 'huggingface';
+export type AIProvider = 'anthropic' | 'openai' | 'google' | 'grok' | 'groq' | 'openrouter' | 'mistral' | 'huggingface';
 
 export interface FileNode {
   name: string;
@@ -119,6 +119,7 @@ export const AI_PROVIDERS: Record<AIProvider, { label: string }> = {
   grok:        { label: 'Grok (xAI)' },
   groq:        { label: 'Groq' },
   openrouter:  { label: 'OpenRouter' },
+  mistral:     { label: 'Mistral AI' },
   huggingface: { label: 'Hugging Face' },
 };
 

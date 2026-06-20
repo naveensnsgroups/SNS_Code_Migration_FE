@@ -67,7 +67,8 @@ export default function StackBadge({ detectedStack }: Props) {
             <LayerRow label="Frontend (Client)"      value={detectedStack.frontend} />
             <LayerRow label="API / Bridge Layer"     value={detectedStack.apiLayer} />
             <LayerRow label="Backend (Server)"       value={detectedStack.backend} />
-            <LayerRow label="Database (Storage)"     value={detectedStack.databaseLayer} />
+            <LayerRow label="Database (Storage)"     value={detectedStack.database} />
+            <LayerRow label="ORM / Data Layer"       value={detectedStack.databaseLayer} />
             <LayerRow label="Cloud / Infrastructure" value={detectedStack.cloudInfrastructure} />
           </div>
         </div>

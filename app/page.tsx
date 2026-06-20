@@ -61,7 +61,7 @@ export default function HomePage() {
     logs, progress, currentFile, phases,
     modernFileTree, modernFolderBasename,
     tokenUsage, isRunning, hasProject, planPhaseDone,
-    activeTool,
+    activeTool, toolCallHistory,
     handleUpload, handleStart, handleStop, handlePause, handleSelectFile, clearSelectedFile,
     handleDownload,
   } = useMigration(backendUrl, settingsTrigger, notify);
@@ -229,6 +229,7 @@ export default function HomePage() {
               logs={logs}
               hasProject={hasProject}
               activeTool={activeTool}
+              toolCallHistory={toolCallHistory}
               onStart={handleStart}
               onStop={handleStop}
               onPause={handlePause}

@@ -207,16 +207,29 @@ export default function LiveStatusOverlay({ data, status, isRunning, onClose }: 
         </>
       )}
 
-      {/* ── Recent Activity ──────────────────────────────────────────────── */}
-      {recentActivity.length > 0 && (
+      {/* ── Tool Call Feed ───────────────────────────────────────────────── */}
+      {data.toolCallHistory.length > 0 && (
         <>
           <div className="ls-overlay__section">
-            <SectionTitle>Recent Activity</SectionTitle>
-            <div className="ls-overlay__activity">
-              {recentActivity.map((msg, i) => (
-                <div key={i} className="ls-overlay__activity-item">
-                  <span className="ls-overlay__activity-dot">·</span>
-                  <span className="ls-overlay__activity-msg" title={msg}>{msg}</span>
+            <SectionTitle>Tool Calls ({data.toolCallHistory.length})</SectionTitle>
+            <div className="ls-overlay__tool-feed">
+              {data.toolCallHistory.map(item => (
+                <div
+                  key={item.id}
+                  className={`ls-overlay__feed-item ${item.success ? 'ls-overlay__feed-item--ok' : 'ls-overlay__feed-item--err'}`}
+                >
+                  <span className="ls-overlay__feed-icon">
+                    {item.success ? '✓' : '✗'}
+                  </span>
+                  <span className="ls-overlay__feed-name" title={item.name}>
+                    {item.name}
+                  </span>
+                  {item.args && (
+                    <span className="ls-overlay__feed-args" title={item.args}>
+                      {item.args}
+                    </span>
+                  )}
+                  <span className="ls-overlay__feed-ts">{item.timestamp}</span>
                 </div>
               ))}
             </div>

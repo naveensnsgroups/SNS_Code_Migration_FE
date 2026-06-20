@@ -13,7 +13,7 @@
 
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   DetectedStack,
   FileNode,
@@ -23,6 +23,7 @@ import {
   TargetStack,
   MIGRATION_PHASES,
 } from '@/types';
+import type { ToolCallHistoryItem } from '@/components/live-status/types';
 import {
   scanProject,
   startMigration,
@@ -102,6 +103,8 @@ export interface UseMigrationReturn {
   hasProject: boolean;
   planPhaseDone: boolean;
   activeTool: { name: string; args: string } | null;  // ← SSE-driven, no log parsing
+  /** SSE-driven completed tool call history — newest first, max 20 entries */
+  toolCallHistory: ToolCallHistoryItem[];
   // Handlers
   handleUpload: (files: FileList | File[], explicitPaths?: string[]) => Promise<void>;
   handleStart: (target: TargetStack) => Promise<void>;
@@ -134,6 +137,10 @@ export function useMigration(
   const [modernFolderBasename, setModernFolderBasename] = useState<string>('');
   const [tokenUsage, setTokenUsage]       = useState<TokenUsage | null>(null);
   const [activeTool, setActiveTool]       = useState<{ name: string; args: string } | null>(null);
+  // Tool call history — SSE-driven, newest first, capped at 20
+  const [toolCallHistory, setToolCallHistory] = useState<ToolCallHistoryItem[]>([]);
+  // Pending tool call staging — stores name+args until tool_response arrives
+  const pendingToolRef = React.useRef<{ name: string; args: string } | null>(null);
 
   const isRunning     = ['scanning', 'planning', 'discovery', 'file-analysis', 'graph-resolution', 'section-writing', 'assembly'].includes(status);
   const hasProject    = fileTree.length > 0;
@@ -212,14 +219,31 @@ export function useMigration(
         // Direct SSE event from AgentExecutor — no log parsing needed
         const name = event.data.name as string ?? '';
         const args = event.data.args as Record<string, unknown> ?? {};
-        setActiveTool({ name, args: condenseSseArgs(args) });
+        const condensed = condenseSseArgs(args);
+        setActiveTool({ name, args: condensed });
+        // Stage for history — finalized when tool_response arrives
+        pendingToolRef.current = { name, args: condensed };
         break;
       }
 
-      case 'tool_response':
-        // Tool finished — clear active tool immediately
+      case 'tool_response': {
+        // Tool finished — record in history, clear active tool
+        const success = event.data.success !== false;  // defaults true if absent
+        const pending = pendingToolRef.current;
+        if (pending) {
+          const entry: ToolCallHistoryItem = {
+            id:        `tc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            name:      pending.name,
+            args:      pending.args,
+            success,
+            timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
+          };
+          setToolCallHistory(prev => [entry, ...prev].slice(0, 20)); // newest first, max 20
+          pendingToolRef.current = null;
+        }
         setActiveTool(null);
         break;
+      }
 
       case 'file_tree_changed':
         // @parcel/watcher (BE) detected file CREATED/UPDATED/DELETED in modernPath.
@@ -269,7 +293,8 @@ export function useMigration(
 
       case 'complete': {
         const payload = event.data as any;
-        setActiveTool(null);   // clear any stuck tool on completion
+        setActiveTool(null);       // clear any stuck tool on completion
+        pendingToolRef.current = null;
         if (payload && payload.isScan) {
           setFileTree(payload.fileTree || []);
           setDetectedStack(payload.detectedStack || null);
@@ -296,6 +321,7 @@ export function useMigration(
 
       case 'error':
         setActiveTool(null);
+        pendingToolRef.current = null;
         setStatus('error');
         addLog(event.data.message as string, 'error');
         // → Notify error (SNS IDE MessageService.error pattern)
@@ -405,6 +431,7 @@ export function useMigration(
       settings.allApiKeys.grok        ||
       settings.allApiKeys.groq        ||
       settings.allApiKeys.openrouter  ||
+      settings.allApiKeys.mistral     ||
       settings.allApiKeys.huggingface ||
       '';
 
@@ -425,6 +452,9 @@ export function useMigration(
         googleRetryDelayRateLimit: settings.googleRetryDelayRateLimit,
         googleRetryDelayOther:     settings.googleRetryDelayOther,
         googleTimeoutMs:           settings.googleTimeoutMs,
+        mistralMaxRetries:          settings.mistralMaxRetries,
+        mistralRetryDelayRateLimit: settings.mistralRetryDelayRateLimit,
+        mistralRetryDelayOther:     settings.mistralRetryDelayOther,
       });
 
       openSSE(`${backendUrl}/api/stream/${sessionId}`);
@@ -438,6 +468,7 @@ export function useMigration(
   const handleStop = useCallback(async () => {
     closeSSE();
     setActiveTool(null);
+    pendingToolRef.current = null;
     if (sessionId) await stopMigration(backendUrl, sessionId);
     setStatus('idle');
     addLog('Migration stopped by user.', 'warning');
@@ -447,6 +478,7 @@ export function useMigration(
   const handlePause = useCallback(async () => {
     closeSSE();
     setActiveTool(null);
+    pendingToolRef.current = null;
     if (sessionId) await pauseMigration(backendUrl, sessionId);
     setStatus('paused');
     addLog('Migration paused.', 'warning');
@@ -489,6 +521,7 @@ export function useMigration(
     modernFileTree, modernFolderBasename, tokenUsage,
     isRunning, hasProject, planPhaseDone,
     activeTool,
+    toolCallHistory,
     handleUpload, handleStart, handleStop, handlePause, handleSelectFile, clearSelectedFile,
     handleDownload,
   };

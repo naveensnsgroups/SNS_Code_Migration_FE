@@ -66,6 +66,9 @@ export interface MigrateStartPayload {
   googleRetryDelayRateLimit?: number;
   googleRetryDelayOther?: number;
   googleTimeoutMs?: number;
+  mistralMaxRetries?: number;
+  mistralRetryDelayRateLimit?: number;
+  mistralRetryDelayOther?: number;
 }
 
 // ── API Functions ─────────────────────────────────────────────────────────────

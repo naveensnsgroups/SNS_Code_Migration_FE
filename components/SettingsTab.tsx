@@ -135,6 +135,46 @@ const SETTING_FIELDS: SettingField[] = [
     defaultValue: ['meta-llama/llama-3-70b-instruct', 'deepseek/deepseek-chat', 'mistralai/mixtral-8x7b-instruct'],
   },
   {
+    id: 'mistral_api_key',
+    category: 'Mistral',
+    label: 'Mistral Api Key',
+    description: 'Enter the API Key for your official Mistral AI (La Plateforme) account. Supports mistral-large, mistral-small, and codestral models.',
+    type: 'password',
+    defaultValue: '',
+  },
+  {
+    id: 'mistral_models',
+    category: 'Mistral',
+    label: 'Mistral Models',
+    description: 'List of Mistral AI models available for code modernization. codestral-latest is recommended for code-heavy migrations.',
+    type: 'list',
+    defaultValue: ['codestral-latest', 'mistral-large-latest', 'mistral-small-latest', 'devstral-latest'],
+  },
+  {
+    id: 'mistral_max_retries',
+    category: 'Mistral',
+    label: 'Max Retries On Errors',
+    description: 'Maximum number of retries in case of request errors. If smaller than 1, then the retry logic is disabled.',
+    type: 'string',
+    defaultValue: '3',
+  },
+  {
+    id: 'mistral_retry_delay_rate_limit',
+    category: 'Mistral',
+    label: 'Retry Delay On Rate Limit Error',
+    description: 'Delay in seconds between retries in case of rate limit errors (429 Too Many Requests).',
+    type: 'string',
+    defaultValue: '60',
+  },
+  {
+    id: 'mistral_retry_delay_other',
+    category: 'Mistral',
+    label: 'Retry Delay On Other Errors',
+    description: 'Delay in seconds between retries in case of other errors (syntax, 500, timeouts). Set to -1 to disable retries in these cases.',
+    type: 'string',
+    defaultValue: '-1',
+  },
+  {
     id: 'huggingface_api_key',
     category: 'Hugging Face',
     label: 'Hugging Face Api Key',
@@ -205,6 +245,8 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   // Tracks the active selected model per provider: { google: 'gemini-2.0-flash', ... }
   const [selectedModels, setSelectedModels] = useState<Record<string, string>>({});
+  // Tracks which provider is currently active (set when user clicks a model in any provider's list)
+  const [activeProvider, setActiveProvider] = useState<string>('');
 
   // Load settings from localStorage
   useEffect(() => {
@@ -224,7 +266,7 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
     setSettings(loadedSettings);
 
     // Load selected model per provider from localStorage
-    const providers = ['anthropic', 'openai', 'google', 'grok', 'groq', 'openrouter', 'huggingface'];
+    const providers = ['anthropic', 'openai', 'google', 'grok', 'groq', 'openrouter', 'mistral', 'huggingface'];
     const sel: Record<string, string> = {};
     for (const p of providers) {
       const raw = localStorage.getItem(`setting_${p}_selected_model`);
@@ -233,6 +275,14 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
       }
     }
     setSelectedModels(sel);
+
+    // Load active provider from localStorage
+    const raw = localStorage.getItem('setting_selected_provider');
+    if (raw) {
+      try { setActiveProvider(JSON.parse(raw)); } catch { setActiveProvider(raw); }
+    } else {
+      setActiveProvider('google'); // default
+    }
   }, [settingsTrigger]);
 
   // Filter settings based on query
@@ -347,10 +397,18 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
             <span>AI Features ({filteredFields.length})</span>
           </div>
           <ul className="settings-category-list">
-            {['Anthropic', 'OpenAI', 'Google', 'Grok', 'Groq', 'OpenRouter', 'Hugging Face', 'General'].map(cat => {
+            {['Anthropic', 'OpenAI', 'Google', 'Grok', 'Groq', 'OpenRouter', 'Mistral', 'Hugging Face', 'General'].map(cat => {
               const count = filteredFields.filter(f => f.category === cat).length;
               if (searchQuery && count === 0) return null;
-              
+
+              // Map category display name → provider key (for activeProvider comparison)
+              const catToProvider: Record<string, string> = {
+                'Anthropic': 'anthropic', 'OpenAI': 'openai', 'Google': 'google',
+                'Grok': 'grok', 'Groq': 'groq', 'OpenRouter': 'openrouter',
+                'Mistral': 'mistral', 'Hugging Face': 'huggingface',
+              };
+              const isActiveProvider = catToProvider[cat] === activeProvider;
+
               return (
                 <li
                   key={cat}
@@ -358,7 +416,16 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
                   onClick={() => setActiveCategory(cat)}
                 >
                   <span className="category-item-text">{cat}</span>
-                  <span className="category-item-count">{count}</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {isActiveProvider && (
+                      <span style={{
+                        fontSize: '9px', fontWeight: 700, color: 'var(--accent-green)',
+                        background: 'rgba(0,200,100,0.12)', border: '1px solid rgba(0,200,100,0.3)',
+                        borderRadius: '3px', padding: '1px 4px', letterSpacing: '0.3px',
+                      }}>ACTIVE</span>
+                    )}
+                    <span className="category-item-count">{count}</span>
+                  </span>
                 </li>
               );
             })}
@@ -435,35 +502,34 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
                   const activeModel = selectedModels[provider] ?? '';
 
                   const handleSelectModel = (model: string) => {
+                    // Save the active model for this provider
                     const key = `setting_${provider}_selected_model`;
                     localStorage.setItem(key, JSON.stringify(model));
                     setSelectedModels(prev => ({ ...prev, [provider]: model }));
+
+                    // ── AUTO-SWITCH PROVIDER ────────────────────────────────────
+                    // Clicking a model in any provider's list makes that provider
+                    // the ACTIVE provider for the next migration run.
+                    localStorage.setItem('setting_selected_provider', JSON.stringify(provider));
+                    setActiveProvider(provider); // ← update sidebar badge instantly
+
                     if (onSettingsSaved) onSettingsSaved();
-                    setSaveStatus(`Active model → ${model}`);
-                    setTimeout(() => setSaveStatus(null), 2000);
+                    setSaveStatus(`Active provider → ${provider}  ·  model → ${model}`);
+                    setTimeout(() => setSaveStatus(null), 3000);
                   };
 
                   return (
                     <div className="settings-list-editor" style={{ maxWidth: '480px' }}>
-                      {/* Active model indicator */}
-                      {activeModel && (
-                        <div style={{
-                          fontSize: '11px', color: 'var(--accent-green)',
-                          marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px'
-                        }}>
-                          <Check size={11} />
-                          <span>Active: <strong style={{ fontFamily: 'var(--font-mono)' }}>{activeModel}</strong></span>
-                        </div>
-                      )}
-                      {!activeModel && (
-                        <div style={{
-                          fontSize: '11px', color: 'var(--text-warning)',
-                          marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px'
-                        }}>
-                          <HelpCircle size={11} />
-                          <span>Click a model below to select it as active</span>
-                        </div>
-                      )}
+                      {/* Active model indicator — single line, no duplication with list highlight */}
+                      <div style={{
+                        fontSize: '11px',
+                        color: activeModel ? 'var(--accent-green)' : 'var(--text-warning)',
+                        marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px'
+                      }}>
+                        {activeModel
+                          ? <><Check size={11} /><span>Click a model below to select it as active</span></>
+                          : <><HelpCircle size={11} /><span>Click a model below to select it as active</span></>}
+                      </div>
 
                       {/* List Items */}
                       <div className="settings-list-items">
