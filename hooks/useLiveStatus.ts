@@ -15,7 +15,7 @@
 
 import { useMemo } from 'react';
 import type { LogEntry, MigrationStatus } from '@/types';
-import type { LiveStatusData, AlertItem } from '@/components/live-status/types';
+import type { LiveStatusData, AlertItem, ToolCallHistoryItem } from '@/components/live-status/types';
 
 // ── Log-derived utilities (agent/stage/fileCount/alerts/activity) ─────────────
 // NOTE: activeTool is NOT derived here — it comes directly from SSE state.
@@ -98,13 +98,15 @@ function deriveRecentActivity(logs: LogEntry[]): string[] {
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useLiveStatus(
-  logs:        LogEntry[],
-  status:      MigrationStatus,
-  isRunning:   boolean,
-  progress:    number,
-  currentFile: string,
+  logs:            LogEntry[],
+  status:          MigrationStatus,
+  isRunning:       boolean,
+  progress:        number,
+  currentFile:     string,
   /** Direct SSE state from useMigration — no log parsing. Always accurate. */
-  activeTool:  { name: string; args: string } | null,
+  activeTool:      { name: string; args: string } | null,
+  /** Direct SSE state from useMigration — completed tool calls, newest first. */
+  toolCallHistory: ToolCallHistoryItem[],
 ): LiveStatusData {
   // Only scan the last 150 logs for derived UI state — prevents O(n) slowdown
   // on long sessions with 500+ log entries.
@@ -134,5 +136,6 @@ export function useLiveStatus(
     currentStage,
     alerts,
     recentActivity,
+    toolCallHistory,      // direct from SSE state
   };
 }

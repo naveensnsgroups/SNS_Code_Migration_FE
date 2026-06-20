@@ -165,9 +165,10 @@ export default function AIConfigTab({
       'grok/grok-2', 'grok/grok-2-mini',
       'groq/llama3-70b-8192', 'groq/llama3-8b-8192',
       'openrouter/meta-llama/llama-3-70b-instruct', 'openrouter/deepseek/deepseek-chat',
+      'mistral/codestral-latest', 'mistral/mistral-large-latest', 'mistral/mistral-small-latest',
       'huggingface/meta-llama/Meta-Llama-3-70B-Instruct',
     ];
-    const providerKeys = ['anthropic_models', 'openai_models', 'google_models', 'grok_models', 'groq_models', 'openrouter_models', 'huggingface_models'];
+    const providerKeys = ['anthropic_models', 'openai_models', 'google_models', 'grok_models', 'groq_models', 'openrouter_models', 'mistral_models', 'huggingface_models'];
     const custom: string[] = [];
     providerKeys.forEach(key => {
       const saved = localStorage.getItem(`setting_${key}`);

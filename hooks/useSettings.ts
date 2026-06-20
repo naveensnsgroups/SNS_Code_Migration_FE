@@ -35,10 +35,15 @@ export interface AppSettings {
   model: string;
   apiKey: string;
   localOutputPath: string;
+  // Google-specific retry config
   googleMaxRetries: number;
   googleRetryDelayRateLimit: number;
   googleRetryDelayOther: number;
   googleTimeoutMs: number;
+  // Mistral-specific retry config
+  mistralMaxRetries: number;
+  mistralRetryDelayRateLimit: number;
+  mistralRetryDelayOther: number;
   allApiKeys: Record<string, string>;
   toolsConfig: Record<string, boolean>;
   aliasesConfig: Record<string, string>;
@@ -83,6 +88,9 @@ export function readSettings(): AppSettings {
     googleRetryDelayRateLimit: parseInt(readStoredString('setting_google_retry_delay_rate_limit', '60'), 10),
     googleRetryDelayOther: parseInt(readStoredString('setting_google_retry_delay_other', '-1'), 10),
     googleTimeoutMs: parseInt(readStoredString('setting_google_timeout_ms', '300000'), 10),
+    mistralMaxRetries: parseInt(readStoredString('setting_mistral_max_retries', '3'), 10),
+    mistralRetryDelayRateLimit: parseInt(readStoredString('setting_mistral_retry_delay_rate_limit', '60'), 10),
+    mistralRetryDelayOther: parseInt(readStoredString('setting_mistral_retry_delay_other', '-1'), 10),
     allApiKeys: {
       anthropic:    readStoredString('setting_anthropic_api_key'),
       openai:       readStoredString('setting_openai_api_key'),
@@ -90,6 +98,7 @@ export function readSettings(): AppSettings {
       grok:         readStoredString('setting_grok_api_key'),
       groq:         readStoredString('setting_groq_api_key'),
       openrouter:   readStoredString('setting_openrouter_api_key'),
+      mistral:      readStoredString('setting_mistral_api_key'),
       huggingface:  readStoredString('setting_huggingface_api_key'),
     },
     toolsConfig: (() => {

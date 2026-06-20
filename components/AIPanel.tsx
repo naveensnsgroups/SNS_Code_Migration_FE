@@ -37,6 +37,8 @@ interface Props {
   logs:             import('@/types').LogEntry[];
   hasProject:       boolean;
   activeTool:       { name: string; args: string } | null;  // ← SSE-driven from useMigration
+  /** SSE-driven completed tool call history — newest first, max 20 */
+  toolCallHistory:  import('@/components/live-status/types').ToolCallHistoryItem[];
   onStart:          (target: TargetStack) => void;
   onStop:           () => void;
   onPause:          () => void;
@@ -62,7 +64,7 @@ function setLocal(key: string, value: string) {
 
 export default function AIPanel({
   detectedStack, status, phases, progress, currentFile,
-  logs, hasProject, activeTool,
+  logs, hasProject, activeTool, toolCallHistory,
   onStart, onStop, onPause,
   settingsTrigger = 0, onSettingsSaved, width,
 }: Props) {
@@ -80,13 +82,13 @@ export default function AIPanel({
   // ── Derived flags ──────────────────────────────────────────────────────────
   const isRunning     = ['scanning', 'planning'].includes(status);
   const isComplete    = status === 'complete';
-  const planPhaseDone = phases.find(p => p.id === 'plan')?.status === 'done';
+  const planPhaseDone = phases.find(p => p.id === 'scan')?.status === 'done'; // Fix 5: 'plan' → 'scan' — 'plan' never existed in phase list
 
   // ── Live Status Overlay toggle (manual only) ───────────────────────────
   const [liveOpen, setLiveOpen] = useState(false);
 
   // Derive real-time live status from logs
-  const liveData = useLiveStatus(logs, status, isRunning, progress, currentFile, activeTool);
+  const liveData = useLiveStatus(logs, status, isRunning, progress, currentFile, activeTool, toolCallHistory);
 
   // ── Sync settings from localStorage on trigger ────────────────────────────
   useEffect(() => {
@@ -118,7 +120,7 @@ export default function AIPanel({
   const hasApiKey = (() => {
     if (apiKey.trim()) return true;
     if (typeof window === 'undefined') return false;
-    const providers = ['anthropic', 'openai', 'google', 'grok', 'groq', 'openrouter', 'huggingface'];
+    const providers = ['anthropic', 'openai', 'google', 'grok', 'groq', 'openrouter', 'mistral', 'huggingface'];
     return providers.some(p => {
       const raw = localStorage.getItem(`setting_${p}_api_key`);
       if (!raw) return false;

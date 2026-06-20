@@ -1106,6 +1106,82 @@ body {
 
 /* Alerts */
 .ls-overlay__alerts { display: flex; flex-direction: column; gap: 4px; }
+
+/* ── Tool Call Feed (SNS IDE chat tool-call history exact pattern) ──────── */
+.ls-overlay__tool-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.ls-overlay__feed-item {
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  grid-template-rows: auto auto;
+  column-gap: 5px;
+  row-gap: 0px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  transition: background 0.08s;
+}
+.ls-overlay__feed-item:hover { background: rgba(255,255,255,0.03); }
+.ls-overlay__feed-item:last-child { border-bottom: none; }
+
+/* Success = faint green tint; Error = faint red tint */
+.ls-overlay__feed-item--ok  { border-left: 2px solid rgba(78,201,176,0.5); }
+.ls-overlay__feed-item--err { border-left: 2px solid rgba(244,135,113,0.5); }
+
+/* Column 1: ✓/✗ icon */
+.ls-overlay__feed-icon {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: flex-start;
+  padding-top: 2px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.ls-overlay__feed-item--ok  .ls-overlay__feed-icon { color: #4ec9b0; }
+.ls-overlay__feed-item--err .ls-overlay__feed-icon { color: #f48771; }
+
+/* Column 2 row 1: Tool name */
+.ls-overlay__feed-name {
+  grid-column: 2;
+  grid-row: 1;
+  color: var(--accent-yellow);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Column 2 row 2: Args (condensed) */
+.ls-overlay__feed-args {
+  grid-column: 2;
+  grid-row: 2;
+  color: var(--text-muted);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Column 3 row 1: Timestamp */
+.ls-overlay__feed-ts {
+  grid-column: 3;
+  grid-row: 1;
+  color: var(--text-muted);
+  font-size: 9.5px;
+  white-space: nowrap;
+  padding-left: 4px;
+  align-self: start;
+}
+
 .ls-overlay__alert {
   display: flex;
   align-items: flex-start;

@@ -47,6 +47,12 @@ export default function AliasesTab({ aliases, onAliasChange }: Props) {
               <optgroup label="Groq">
                 <option value="groq/llama3-70b-8192">groq/llama3-70b-8192</option>
               </optgroup>
+              <optgroup label="Mistral">
+                <option value="mistral/codestral-latest">mistral/codestral-latest</option>
+                <option value="mistral/mistral-large-latest">mistral/mistral-large-latest</option>
+                <option value="mistral/mistral-small-latest">mistral/mistral-small-latest</option>
+                <option value="mistral/devstral-latest">mistral/devstral-latest</option>
+              </optgroup>
             </select>
           </div>
         ))}
