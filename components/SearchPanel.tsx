@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, FileText, CornerDownRight, AlertCircle, SearchCheck } from 'lucide-react';
+import { Search, FileText, CornerDownRight, AlertCircle } from 'lucide-react';
 
 interface Match {
   filePath: string;

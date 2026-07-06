@@ -13,7 +13,7 @@ interface Props {
   onDownload?: (fileName: string) => void;
 }
 
-function CodeBlock({ code, language }: { code: string; language?: string }) {
+function CodeBlock({ code }: { code: string }) {
   return (
     <pre style={{
       margin: 0,
@@ -57,7 +57,11 @@ function highlightLine(line: string): React.ReactNode {
   });
 }
 
-const DOWNLOADABLE_FILES = ['Stage1_Analysis.md', 'migration-plan.md'];
+// 'migration-plan.md' was removed from this list — no current backend pipeline
+// path produces that file (only Stage1_Analysis.md is ever assembled/written;
+// see SNS_Code_Migration_BE section-assembler.ts). Keeping it here made the
+// download button appear for a file that could never actually exist.
+const DOWNLOADABLE_FILES = ['Stage1_Analysis.md'];
 
 export default function CodeViewer({ legacyCode, modernCode, legacyFile, modernFile, onClose, onDownload }: Props) {
   const fileName = legacyFile?.split('/').pop() ?? legacyFile ?? '';

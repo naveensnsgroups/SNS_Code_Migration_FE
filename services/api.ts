@@ -36,7 +36,10 @@ export interface SessionTokensResponse {
     cachedInputTokens?: number;
     readCachedInputTokens?: number;
     totalTokens: number;
-    estimatedCost: number;
+    /** null = no pricing rate configured for the model(s) used — never a guess. */
+    estimatedCost: number | null;
+    /** true = estimatedCost is a real but PARTIAL sum (some models used had no rate configured). */
+    costIncomplete?: boolean;
     model?: string;
   } | null;
   /** Per-model aggregation of token usage history (SNS IDE ModelTokenUsageData pattern) */
@@ -48,6 +51,8 @@ export interface SessionTokensResponse {
     readCachedInputTokens?: number;
     totalTokens: number;
     lastUsed?: string;
+    /** null = no pricing rate configured for this exact model — render as "not available". */
+    estimatedCost: number | null;
   }[];
   sessionId: string;
 }
@@ -62,6 +67,8 @@ export interface MigrateStartPayload {
   toolsConfig: Record<string, boolean>;
   aliasesConfig: Record<string, string>;
   promptFragments: Record<string, string>;
+  /** User-supplied per-model $/1M-token rates — see hooks/useSettings.ts. */
+  modelPricing?: Record<string, { inputPerM: number; outputPerM: number; cacheWritePerM?: number; cacheReadPerM?: number }>;
   googleMaxRetries?: number;
   googleRetryDelayRateLimit?: number;
   googleRetryDelayOther?: number;
@@ -113,11 +120,12 @@ export async function stopMigration(
   backendUrl: string,
   sessionId: string
 ): Promise<void> {
-  await fetch(`${backendUrl}/api/migrate/stop`, {
+  const res = await fetch(`${backendUrl}/api/migrate/stop`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId }),
-  }).catch(() => {});
+  });
+  if (!res.ok) throw new Error(await res.text());
 }
 
 /**
@@ -128,11 +136,12 @@ export async function pauseMigration(
   backendUrl: string,
   sessionId: string
 ): Promise<void> {
-  await fetch(`${backendUrl}/api/migrate/pause`, {
+  const res = await fetch(`${backendUrl}/api/migrate/pause`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId }),
-  }).catch(() => {});
+  });
+  if (!res.ok) throw new Error(await res.text());
 }
 
 /**
@@ -164,6 +173,33 @@ export async function fetchModernTree(
   );
   if (!res.ok) throw new Error('Failed to load modern file tree');
   return res.json() as Promise<ModernTreeResponse>;
+}
+
+export interface SessionStateResponse {
+  sessionId: string;
+  status: string;
+  fileTree: FileNode[];
+  detectedStack: DetectedStack | null;
+  targetStack: TargetStack | null;
+  phases: { id: string; label: string; status: 'pending' | 'active' | 'done' | 'error' }[];
+  progress: number;
+  currentFile: string;
+}
+
+/**
+ * Full restorable session state — used on page load to recover an in-progress
+ * or completed session after a refresh, instead of only remembering the
+ * sessionId and losing everything else.
+ */
+export async function fetchSessionState(
+  backendUrl: string,
+  sessionId: string
+): Promise<SessionStateResponse> {
+  const res = await fetch(
+    `${backendUrl}/api/migrate/state?sessionId=${sessionId}`
+  );
+  if (!res.ok) throw new Error('Failed to load session state');
+  return res.json() as Promise<SessionStateResponse>;
 }
 
 // ── Config API — Real Agent + Tool Registry ───────────────────────────────────
@@ -238,6 +274,25 @@ export async function fetchTools(backendUrl: string): Promise<ToolsResponse> {
  * Fetch persisted token usage from session.json for a session.
  * GET /api/migrate/tokens?sessionId=...\n * Used to hydrate the Token Usage tab on load/page refresh.
  */
+/**
+ * Update the user-supplied per-model pricing rate(s) for a session. Applies
+ * retroactively — the backend recomputes cost fresh from this on every
+ * /tokens read, so this doesn't require restarting the migration.
+ * POST /api/migrate/pricing
+ */
+export async function updateModelPricing(
+  backendUrl: string,
+  sessionId: string,
+  modelPricing: Record<string, { inputPerM: number; outputPerM: number; cacheWritePerM?: number; cacheReadPerM?: number }>
+): Promise<void> {
+  const res = await fetch(`${backendUrl}/api/migrate/pricing`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, modelPricing }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
 export async function fetchSessionTokens(
   backendUrl: string,
   sessionId: string

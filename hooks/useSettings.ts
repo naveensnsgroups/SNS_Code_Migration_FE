@@ -8,7 +8,7 @@
 //    const { backendUrl, provider, model, apiKey, allApiKeys } = useSettings();
 // =============================================================================
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AIProvider } from '@/types';
 
 const DEFAULT_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:4000';
@@ -48,6 +48,10 @@ export interface AppSettings {
   toolsConfig: Record<string, boolean>;
   aliasesConfig: Record<string, string>;
   promptFragments: Record<string, string>;
+  /** User-supplied per-model $/1M-token rates. Empty unless the user configured
+   *  one — never a hardcoded default. See TokensTab.tsx for the editor UI and
+   *  the backend's agent-cost-estimator.ts for why this isn't a static table. */
+  modelPricing: Record<string, { inputPerM: number; outputPerM: number; cacheWritePerM?: number; cacheReadPerM?: number }>;
 }
 
 export function useSettings(settingsTrigger = 0): AppSettings {
@@ -108,13 +112,14 @@ export function readSettings(): AppSettings {
       try { return JSON.parse(localStorage.getItem('ai_config_aliases') || '{}'); } catch { return {}; }
     })(),
     promptFragments: (() => {
-      const ids = ['system-agent-rules', 'validation-rules-strict', 'scanner-stack-detect'];
+      // Only 'system-agent-rules' is ever read by the backend (see FragmentsTab.tsx).
+      const saved = localStorage.getItem('ai_prompt_fragment_system-agent-rules');
       const map: Record<string, string> = {};
-      for (const id of ids) {
-        const saved = localStorage.getItem(`ai_prompt_fragment_${id}`);
-        if (saved !== null) map[id] = saved;
-      }
+      if (saved !== null) map['system-agent-rules'] = saved;
       return map;
+    })(),
+    modelPricing: (() => {
+      try { return JSON.parse(localStorage.getItem('ai_config_model_pricing') || '{}'); } catch { return {}; }
     })(),
   };
 }

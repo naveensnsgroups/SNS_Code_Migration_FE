@@ -12,10 +12,14 @@ const ALIAS_DEFS = [
 
 interface Props {
   aliases: Record<string, string>;
+  /** The SAME model list computed in AIConfigTab (user's custom models if set,
+   *  otherwise the shared default seed list) — keeps this dropdown from
+   *  drifting out of sync with what the user actually configured in Settings. */
+  modelOptions: string[];
   onAliasChange: (key: string, value: string) => void;
 }
 
-export default function AliasesTab({ aliases, onAliasChange }: Props) {
+export default function AliasesTab({ aliases, modelOptions, onAliasChange }: Props) {
   return (
     <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
       <h3 style={{ fontSize: '14px', fontWeight: 600 }}>Model Alias Mapping</h3>
@@ -24,38 +28,28 @@ export default function AliasesTab({ aliases, onAliasChange }: Props) {
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '500px' }}>
-        {ALIAS_DEFS.map(alias => (
-          <div key={alias.key} className="form-group">
-            <label className="form-label">{alias.label}</label>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>{alias.desc}</div>
-            <select className="form-select-premium" value={aliases[alias.key] || ''} onChange={e => onAliasChange(alias.key, e.target.value)}>
-              <optgroup label="Anthropic">
-                <option value="anthropic/claude-opus-4">anthropic/claude-opus-4</option>
-                <option value="anthropic/claude-sonnet-4-5">anthropic/claude-sonnet-4-5</option>
-                <option value="anthropic/claude-3-5-sonnet-20241022">anthropic/claude-3-5-sonnet-20241022</option>
-                <option value="anthropic/claude-3-haiku-20240307">anthropic/claude-3-haiku-20240307</option>
-              </optgroup>
-              <optgroup label="OpenAI">
-                <option value="openai/gpt-4o">openai/gpt-4o</option>
-                <option value="openai/gpt-4o-mini">openai/gpt-4o-mini</option>
-              </optgroup>
-              <optgroup label="Google">
-                <option value="google/gemini-2.0-flash">google/gemini-2.0-flash</option>
-                <option value="google/gemini-1.5-pro">google/gemini-1.5-pro</option>
-                <option value="google/gemini-1.5-flash">google/gemini-1.5-flash</option>
-              </optgroup>
-              <optgroup label="Groq">
-                <option value="groq/llama3-70b-8192">groq/llama3-70b-8192</option>
-              </optgroup>
-              <optgroup label="Mistral">
-                <option value="mistral/codestral-latest">mistral/codestral-latest</option>
-                <option value="mistral/mistral-large-latest">mistral/mistral-large-latest</option>
-                <option value="mistral/mistral-small-latest">mistral/mistral-small-latest</option>
-                <option value="mistral/devstral-latest">mistral/devstral-latest</option>
-              </optgroup>
-            </select>
-          </div>
-        ))}
+        {ALIAS_DEFS.map(alias => {
+          const currentValue = aliases[alias.key] || '';
+          // If the currently-saved value isn't in the live model list (e.g. the
+          // user removed that model from Settings since setting the alias),
+          // still show it so the real saved value is never silently hidden.
+          const options = currentValue && !modelOptions.includes(currentValue)
+            ? [currentValue, ...modelOptions]
+            : modelOptions;
+
+          return (
+            <div key={alias.key} className="form-group">
+              <label className="form-label">{alias.label}</label>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>{alias.desc}</div>
+              <select className="form-select-premium" value={currentValue} onChange={e => onAliasChange(alias.key, e.target.value)}>
+                {options.length === 0 && <option value="">No models configured — add some in Settings</option>}
+                {options.map(model => (
+                  <option key={model} value={model}>{model}</option>
+                ))}
+              </select>
+            </div>
+          );
+        })}
       </div>
 
       <div style={{ fontSize: '11px', color: 'var(--text-success)', marginTop: '4px' }}>

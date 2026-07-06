@@ -32,6 +32,7 @@ import {
   fetchFileContent,
   fetchModernTree,
   fetchSessionTokens,
+  fetchSessionState,
   downloadFile,
 } from '@/services/api';
 
@@ -46,6 +47,23 @@ function generateId(): string {
 
 function timestamp(): string {
   return new Date().toLocaleTimeString('en-US', { hour12: false });
+}
+
+// Runtime guards for SSE payload fields — the backend is a separate process and
+// its event shape can drift (new/renamed status, a typo'd level). Without this,
+// an unexpected value gets blindly cast with `as X` and can silently corrupt
+// UI state (e.g. an unrecognized status making STATUS_LABEL[status] render
+// undefined). Fail safe: fall back to a known-good value and log a warning
+// instead of trusting the cast.
+const VALID_LOG_LEVELS = new Set<LogEntry['level']>(['info', 'success', 'error', 'warning', 'command', 'stream']);
+const VALID_MIGRATION_STATUSES = new Set<MigrationStatus>([
+  'idle', 'scanning', 'planning', 'discovery', 'file-analysis',
+  'graph-resolution', 'section-writing', 'assembly', 'complete', 'error', 'paused',
+]);
+const VALID_PHASE_STATUSES = new Set<MigrationPhase['status']>(['pending', 'active', 'done', 'error']);
+
+function safeLogLevel(value: unknown): LogEntry['level'] {
+  return VALID_LOG_LEVELS.has(value as LogEntry['level']) ? (value as LogEntry['level']) : 'info';
 }
 
 function markMigrated(tree: FileNode[], path: string): FileNode[] {
@@ -64,7 +82,10 @@ export interface TokenUsage {
   cachedInputTokens?: number;
   readCachedInputTokens?: number;
   totalTokens: number;
-  estimatedCost: number;
+  /** null = no pricing rate configured for the model(s) used — never a guessed number. */
+  estimatedCost: number | null;
+  /** true = estimatedCost is a real but PARTIAL sum (some models used had no rate configured). */
+  costIncomplete?: boolean;
   model?: string;
 }
 
@@ -101,7 +122,6 @@ export interface UseMigrationReturn {
   tokenUsage: TokenUsage | null;
   isRunning: boolean;
   hasProject: boolean;
-  planPhaseDone: boolean;
   activeTool: { name: string; args: string } | null;  // ← SSE-driven, no log parsing
   /** SSE-driven completed tool call history — newest first, max 20 entries */
   toolCallHistory: ToolCallHistoryItem[];
@@ -119,7 +139,6 @@ export interface UseMigrationReturn {
 
 export function useMigration(
   backendUrl: string,
-  settingsTrigger: number,
   onNotify?: (opts: { type: 'info' | 'success' | 'warning' | 'error'; message: string; persistent?: boolean }) => void
 ): UseMigrationReturn {
   const [status, setStatus]               = useState<MigrationStatus>('idle');
@@ -139,13 +158,13 @@ export function useMigration(
   const [activeTool, setActiveTool]       = useState<{ name: string; args: string } | null>(null);
   // Tool call history — SSE-driven, newest first, capped at 20
   const [toolCallHistory, setToolCallHistory] = useState<ToolCallHistoryItem[]>([]);
-  // Pending tool call staging — stores name+args until tool_response arrives
-  const pendingToolRef = React.useRef<{ name: string; args: string } | null>(null);
+  // Pending tool call staging — stores name+args until tool_response arrives.
+  // Keyed by the backend's tool-call id (a Map, not a single slot) so two
+  // overlapping tool calls never silently overwrite each other in history.
+  const pendingToolsRef = React.useRef<Map<string, { name: string; args: string }>>(new Map());
 
   const isRunning     = ['scanning', 'planning', 'discovery', 'file-analysis', 'graph-resolution', 'section-writing', 'assembly'].includes(status);
   const hasProject    = fileTree.length > 0;
-  // Stage 1 is done when the assembly phase is marked done
-  const planPhaseDone = phases.find(p => p.id === 'assembly')?.status === 'done';
 
   // ── Log helper ──────────────────────────────────────────────────────────────
   const addLog = useCallback((message: string, level: LogEntry['level'] = 'info', phase?: string) => {
@@ -174,16 +193,6 @@ export function useMigration(
       localStorage.setItem('last_session_id', sessionId);
     }
   }, [sessionId]);
-
-  // Restore sessionId on mount from localStorage
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const saved = localStorage.getItem('last_session_id');
-    if (saved && !sessionId) {
-      setSessionId(saved);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Refresh modern tree whenever session changes
   useEffect(() => {
@@ -217,19 +226,23 @@ export function useMigration(
     switch (event.type) {
       case 'tool_call': {
         // Direct SSE event from AgentExecutor — no log parsing needed
+        const id   = event.data.id as string ?? '';
         const name = event.data.name as string ?? '';
         const args = event.data.args as Record<string, unknown> ?? {};
         const condensed = condenseSseArgs(args);
         setActiveTool({ name, args: condensed });
-        // Stage for history — finalized when tool_response arrives
-        pendingToolRef.current = { name, args: condensed };
+        // Stage for history — finalized when tool_response arrives. Keyed by
+        // call id (a Map, not a single slot) so two overlapping tool calls
+        // never silently overwrite each other before their responses land.
+        if (id) pendingToolsRef.current.set(id, { name, args: condensed });
         break;
       }
 
       case 'tool_response': {
         // Tool finished — record in history, clear active tool
+        const id      = event.data.id as string ?? '';
         const success = event.data.success !== false;  // defaults true if absent
-        const pending = pendingToolRef.current;
+        const pending = id ? pendingToolsRef.current.get(id) : undefined;
         if (pending) {
           const entry: ToolCallHistoryItem = {
             id:        `tc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -239,9 +252,12 @@ export function useMigration(
             timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
           };
           setToolCallHistory(prev => [entry, ...prev].slice(0, 20)); // newest first, max 20
-          pendingToolRef.current = null;
+          pendingToolsRef.current.delete(id);
         }
-        setActiveTool(null);
+        // Only clear the "currently active" indicator if nothing else is
+        // still pending — otherwise a still-running overlapping call would
+        // have its activeTool indicator wiped by this unrelated response.
+        if (pendingToolsRef.current.size === 0) setActiveTool(null);
         break;
       }
 
@@ -255,7 +271,7 @@ export function useMigration(
       case 'log':
         addLog(
           event.data.message as string,
-          (event.data.level as LogEntry['level']) ?? 'info',
+          safeLogLevel(event.data.level),
           event.data.phase as string
         );
         if (
@@ -276,15 +292,25 @@ export function useMigration(
         setCurrentFile((event.data.currentFile as string) ?? '');
         break;
 
-      case 'phase_change':
-        setStatus(event.data.phase as MigrationStatus);
-        setPhases(prev => prev.map(p =>
-          p.id === event.data.phaseId
-            ? { ...p, status: event.data.status as MigrationPhase['status'] }
-            : p
-        ));
+      case 'phase_change': {
+        const nextStatus = event.data.phase;
+        if (VALID_MIGRATION_STATUSES.has(nextStatus as MigrationStatus)) {
+          setStatus(nextStatus as MigrationStatus);
+        } else {
+          addLog(`Received unrecognized migration status "${String(nextStatus)}" — ignored.`, 'warning');
+        }
+        const nextPhaseStatus = event.data.status;
+        const safePhaseStatus = VALID_PHASE_STATUSES.has(nextPhaseStatus as MigrationPhase['status'])
+          ? (nextPhaseStatus as MigrationPhase['status'])
+          : undefined;
+        if (safePhaseStatus) {
+          setPhases(prev => prev.map(p =>
+            p.id === event.data.phaseId ? { ...p, status: safePhaseStatus } : p
+          ));
+        }
         if (sessionId) refreshModernTree(sessionId);
         break;
+      }
 
       case 'file_migrated':
         setFileTree(prev => markMigrated(prev, event.data.path as string));
@@ -294,7 +320,7 @@ export function useMigration(
       case 'complete': {
         const payload = event.data as any;
         setActiveTool(null);       // clear any stuck tool on completion
-        pendingToolRef.current = null;
+        pendingToolsRef.current.clear();
         if (payload && payload.isScan) {
           setFileTree(payload.fileTree || []);
           setDetectedStack(payload.detectedStack || null);
@@ -321,7 +347,7 @@ export function useMigration(
 
       case 'error':
         setActiveTool(null);
-        pendingToolRef.current = null;
+        pendingToolsRef.current.clear();
         setStatus('error');
         addLog(event.data.message as string, 'error');
         // → Notify error (SNS IDE MessageService.error pattern)
@@ -334,13 +360,16 @@ export function useMigration(
         break;
 
       case 'token_usage': {
-        const tu = {
+        const tu: TokenUsage = {
           inputTokens:   (event.data.inputTokens   as number) ?? 0,
           outputTokens:  (event.data.outputTokens  as number) ?? 0,
           cachedInputTokens: (event.data.cachedInputTokens as number) ?? undefined,
           readCachedInputTokens: (event.data.readCachedInputTokens as number) ?? undefined,
           totalTokens:   (event.data.totalTokens   as number) ?? 0,
-          estimatedCost: (event.data.estimatedCost as number) ?? 0,
+          // null = genuinely no pricing rate configured — do NOT default to 0,
+          // that would render as "$0.0000" and imply the run was free.
+          estimatedCost: (event.data.estimatedCost as number | null) ?? null,
+          costIncomplete: (event.data.costIncomplete as boolean) ?? undefined,
           model:         (event.data.model         as string) ?? undefined,
         };
         setTokenUsage(tu);
@@ -364,6 +393,47 @@ export function useMigration(
   }, [addLog]);
 
   const { openSSE, closeSSE } = useSSE({ onEvent: handleSSEEvent, onError: handleSSEError });
+
+  // ── Full session restore on mount ───────────────────────────────────────────
+  // Previously this only restored `sessionId` itself — fileTree, detectedStack,
+  // phases, and the SSE connection were all lost on refresh, so a page reload
+  // during an active migration reverted the UI to the "no project" welcome
+  // screen while the backend kept running headless with no way to reconnect.
+  // Now it fetches the real backend session state and, if a migration is still
+  // actively running server-side, reopens the SSE stream to resume live updates.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const saved = localStorage.getItem('last_session_id');
+    if (!saved) return;
+
+    fetchSessionState(backendUrl, saved)
+      .then(state => {
+        setSessionId(state.sessionId);
+        setFileTree(state.fileTree || []);
+        setDetectedStack(state.detectedStack);
+        setPhases(state.phases.length > 0 ? (state.phases as MigrationPhase[]) : MIGRATION_PHASES);
+        setProgress(state.progress);
+        setCurrentFile(state.currentFile);
+        setStatus(state.status as MigrationStatus);
+
+        const stillRunning = [
+          'scanning', 'planning', 'discovery', 'file-analysis',
+          'graph-resolution', 'section-writing', 'assembly',
+        ].includes(state.status);
+        if (stillRunning) {
+          addLog('Reconnected to in-progress migration.', 'info');
+          openSSE(`${backendUrl}/api/stream/${state.sessionId}`);
+        }
+      })
+      .catch(() => {
+        // Session no longer exists on the backend (expired/deleted) — drop the
+        // stale reference instead of retrying this fetch on every future mount.
+        localStorage.removeItem('last_session_id');
+      });
+  // Intentionally run once on mount only — restoring is a one-time action per
+  // page load, not something that should re-run if backendUrl changes later.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── File Upload → Scan ──────────────────────────────────────────────────────
   const handleUpload = useCallback(async (files: FileList | File[], explicitPaths?: string[]) => {
@@ -409,7 +479,7 @@ export function useMigration(
       addLog(`Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
       setStatus('error');
     }
-  }, [addLog, backendUrl, refreshModernTree, openSSE]);
+  }, [addLog, backendUrl, openSSE]);
 
   // ── Start Migration ─────────────────────────────────────────────────────────
   const handleStart = useCallback(async (target: TargetStack) => {
@@ -448,6 +518,7 @@ export function useMigration(
         toolsConfig:     settings.toolsConfig,
         aliasesConfig:   settings.aliasesConfig,
         promptFragments: settings.promptFragments,
+        modelPricing:    settings.modelPricing,
         googleMaxRetries:          settings.googleMaxRetries,
         googleRetryDelayRateLimit: settings.googleRetryDelayRateLimit,
         googleRetryDelayOther:     settings.googleRetryDelayOther,
@@ -462,27 +533,41 @@ export function useMigration(
       addLog(`Migration start failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
       setStatus('error');
     }
-  }, [sessionId, addLog, backendUrl, planPhaseDone, openSSE]);
+  }, [sessionId, addLog, backendUrl, openSSE]);
 
   // ── Stop ─────────────────────────────────────────────────────────────────────
   const handleStop = useCallback(async () => {
     closeSSE();
     setActiveTool(null);
-    pendingToolRef.current = null;
-    if (sessionId) await stopMigration(backendUrl, sessionId);
-    setStatus('idle');
-    addLog('Migration stopped by user.', 'warning');
-  }, [sessionId, addLog, backendUrl, closeSSE]);
+    pendingToolsRef.current.clear();
+    try {
+      if (sessionId) await stopMigration(backendUrl, sessionId);
+      setStatus('idle');
+      addLog('Migration stopped by user.', 'warning');
+    } catch (err: unknown) {
+      // The backend call failed — the pipeline may still be running server-side.
+      // Surface this instead of silently pretending Stop succeeded.
+      const msg = `Stop request failed: ${err instanceof Error ? err.message : 'Unknown error'}. The migration may still be running on the server.`;
+      addLog(msg, 'error');
+      onNotify?.({ type: 'error', message: msg, persistent: true });
+    }
+  }, [sessionId, addLog, backendUrl, closeSSE, onNotify]);
 
   // ── Pause ────────────────────────────────────────────────────────────────────
   const handlePause = useCallback(async () => {
     closeSSE();
     setActiveTool(null);
-    pendingToolRef.current = null;
-    if (sessionId) await pauseMigration(backendUrl, sessionId);
-    setStatus('paused');
-    addLog('Migration paused.', 'warning');
-  }, [sessionId, addLog, backendUrl, closeSSE]);
+    pendingToolsRef.current.clear();
+    try {
+      if (sessionId) await pauseMigration(backendUrl, sessionId);
+      setStatus('paused');
+      addLog('Migration paused.', 'warning');
+    } catch (err: unknown) {
+      const msg = `Pause request failed: ${err instanceof Error ? err.message : 'Unknown error'}. The migration may still be running on the server.`;
+      addLog(msg, 'error');
+      onNotify?.({ type: 'error', message: msg, persistent: true });
+    }
+  }, [sessionId, addLog, backendUrl, closeSSE, onNotify]);
 
   // ── Select File ──────────────────────────────────────────────────────────────
   const handleSelectFile = useCallback(async (
@@ -519,7 +604,7 @@ export function useMigration(
     status, sessionId, fileTree, detectedStack, selectedFile,
     legacyCode, modernCode, logs, progress, currentFile, phases,
     modernFileTree, modernFolderBasename, tokenUsage,
-    isRunning, hasProject, planPhaseDone,
+    isRunning, hasProject,
     activeTool,
     toolCallHistory,
     handleUpload, handleStart, handleStop, handlePause, handleSelectFile, clearSelectedFile,

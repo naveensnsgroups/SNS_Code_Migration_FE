@@ -34,7 +34,7 @@ interface Props {
   phases:           MigrationPhase[];
   progress:         number;
   currentFile:      string;
-  logs:             import('@/types').LogEntry[];
+  logs:             LogEntry[];
   hasProject:       boolean;
   activeTool:       { name: string; args: string } | null;  // ← SSE-driven from useMigration
   /** SSE-driven completed tool call history — newest first, max 20 */
@@ -82,13 +82,17 @@ export default function AIPanel({
   // ── Derived flags ──────────────────────────────────────────────────────────
   const isRunning     = ['scanning', 'planning'].includes(status);
   const isComplete    = status === 'complete';
-  const planPhaseDone = phases.find(p => p.id === 'scan')?.status === 'done'; // Fix 5: 'plan' → 'scan' — 'plan' never existed in phase list
+  // Renamed from the historical "planPhaseDone" — this checks the SCAN phase
+  // specifically (stack detection), not a "plan" phase that never existed.
+  // Gates showing TargetConfig, since target framework/db/lang selection
+  // needs detectedStack to already be populated.
+  const scanPhaseDone = phases.find(p => p.id === 'scan')?.status === 'done';
 
   // ── Live Status Overlay toggle (manual only) ───────────────────────────
   const [liveOpen, setLiveOpen] = useState(false);
 
   // Derive real-time live status from logs
-  const liveData = useLiveStatus(logs, status, isRunning, progress, currentFile, activeTool, toolCallHistory);
+  const liveData = useLiveStatus(logs, progress, currentFile, activeTool, toolCallHistory);
 
   // ── Sync settings from localStorage on trigger ────────────────────────────
   useEffect(() => {
@@ -139,7 +143,9 @@ export default function AIPanel({
       framework:     targetFramework,
       database:      targetDb,
       language:      targetLang,
-      testFramework: testFramework || 'vitest',
+      // Send exactly what the user typed — no hardcoded fallback, same
+      // discipline as `hasModel` above. An empty value means "not specified".
+      testFramework,
       outputMode:    'direct',
     });
   }, [provider, model, targetFramework, targetDb, targetLang, testFramework, onStart]);
@@ -172,7 +178,7 @@ export default function AIPanel({
         {/* Live Status — active tool, agent, stage, file, alerts (OLD EMBEDDED — removed) */}
 
         {/* Target Config — free-text inputs, visible after Stage-1 plan */}
-        {detectedStack && planPhaseDone && (
+        {detectedStack && scanPhaseDone && (
           <TargetConfig
             detectedStack={detectedStack}
             targetFramework={targetFramework}
@@ -203,7 +209,7 @@ export default function AIPanel({
           hasApiKey={hasApiKey}
           hasModel={hasModel}
           hasProject={hasProject}
-          planPhaseDone={planPhaseDone}
+          planPhaseDone={scanPhaseDone}
           onStart={handleStart}
           onStop={onStop}
           onPause={onPause}

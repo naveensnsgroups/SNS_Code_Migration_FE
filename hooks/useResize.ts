@@ -9,7 +9,7 @@
 //    const [terminalHeight, startResizeTerminal] = usePanelResize(220, 80, 600, 'y', true);
 // =============================================================================
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 /**
  * @param initial  Initial size in pixels
@@ -27,6 +27,22 @@ export function usePanelResize(
 ): [number, (e: React.MouseEvent) => void] {
   const [size, setSize] = useState(initial);
 
+  // Tracks the currently-attached drag listeners so they can be removed on
+  // unmount even if the component unmounts mid-drag (before mouseup fires) —
+  // without this, dragging then navigating away leaks a document-level
+  // mousemove/mouseup listener pair forever.
+  const activeDragRef = useRef<{ doDrag: (e: MouseEvent) => void; stopDrag: () => void } | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (activeDragRef.current) {
+        document.removeEventListener('mousemove', activeDragRef.current.doDrag);
+        document.removeEventListener('mouseup', activeDragRef.current.stopDrag);
+        activeDragRef.current = null;
+      }
+    };
+  }, []);
+
   const startResize = (e: React.MouseEvent) => {
     e.preventDefault();
     const startPos = axis === 'x' ? e.clientX : e.clientY;
@@ -42,8 +58,10 @@ export function usePanelResize(
     const stopDrag = () => {
       document.removeEventListener('mousemove', doDrag);
       document.removeEventListener('mouseup', stopDrag);
+      activeDragRef.current = null;
     };
 
+    activeDragRef.current = { doDrag, stopDrag };
     document.addEventListener('mousemove', doDrag);
     document.addEventListener('mouseup', stopDrag);
   };

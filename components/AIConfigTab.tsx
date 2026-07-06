@@ -13,8 +13,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Settings, Layers, Coins, Bookmark, Wrench, Award, Link, Database, Bot } from 'lucide-react';
+import { Users, Layers, Coins, Bookmark, Wrench, Award, Link, Database, Bot } from 'lucide-react';
 import { fetchAgents, fetchTools, type AgentDto, type ToolDto } from '@/services/api';
+import { getAllDefaultModelOptions, getDefaultAliases } from '@/constants/models';
+import type { TokenUsage } from '@/hooks/useMigration';
 import AgentsTab   from '@/components/ai-config/AgentsTab';
 import VariablesTab from '@/components/ai-config/VariablesTab';
 import McpTab      from '@/components/ai-config/McpTab';
@@ -50,17 +52,8 @@ interface MCPServer {
   version?: string | null;
 }
 
-// ── TokenUsage ────────────────────────────────────────────────────────────────
-
-interface TokenUsage {
-  inputTokens: number;
-  outputTokens: number;
-  cachedInputTokens?: number;
-  readCachedInputTokens?: number;
-  totalTokens: number;
-  estimatedCost: number;
-  model?: string;
-}
+// TokenUsage is imported from hooks/useMigration.ts — see comment there for
+// why estimatedCost is `number | null` (null = no pricing rate configured).
 
 // ── Props ──────────────────────────────────────────────────────────────────────
 
@@ -108,13 +101,9 @@ export default function AIConfigTab({
 
   const [aliasesConfig, setAliasesConfig] = useState<Record<string, string>>(() => {
     try {
-      return JSON.parse(localStorage.getItem('ai_config_aliases') || JSON.stringify({
-        'reasoning-model': 'anthropic/claude-3-5-sonnet-20241022',
-        'fast-model':      'openai/gpt-4o-mini',
-        'chat-model':      'anthropic/claude-3-5-sonnet-20241022',
-      }));
+      return JSON.parse(localStorage.getItem('ai_config_aliases') || JSON.stringify(getDefaultAliases()));
     } catch {
-      return { 'reasoning-model': 'anthropic/claude-3-5-sonnet-20241022', 'fast-model': 'openai/gpt-4o-mini', 'chat-model': 'anthropic/claude-3-5-sonnet-20241022' };
+      return getDefaultAliases();
     }
   });
 
@@ -158,16 +147,8 @@ export default function AIConfigTab({
 
   // ── Load model options from localStorage ──────────────────────────────────
   useEffect(() => {
-    const defaultModels = [
-      'anthropic/claude-sonnet-4-6', 'anthropic/claude-sonnet-4-5', 'anthropic/claude-opus-4-6',
-      'openai/gpt-4o', 'openai/gpt-4o-mini',
-      'google/gemini-3.1-pro-preview', 'google/gemini-3-flash-preview',
-      'grok/grok-2', 'grok/grok-2-mini',
-      'groq/llama3-70b-8192', 'groq/llama3-8b-8192',
-      'openrouter/meta-llama/llama-3-70b-instruct', 'openrouter/deepseek/deepseek-chat',
-      'mistral/codestral-latest', 'mistral/mistral-large-latest', 'mistral/mistral-small-latest',
-      'huggingface/meta-llama/Meta-Llama-3-70B-Instruct',
-    ];
+    // Single source of truth for the seed list — see constants/models.ts.
+    const defaultModels = getAllDefaultModelOptions();
     const providerKeys = ['anthropic_models', 'openai_models', 'google_models', 'grok_models', 'groq_models', 'openrouter_models', 'mistral_models', 'huggingface_models'];
     const custom: string[] = [];
     providerKeys.forEach(key => {
@@ -298,7 +279,7 @@ export default function AIConfigTab({
         )}
 
         {activeSubTab === 'skills'  && <SkillsTab backendUrl={backendUrl} />}
-        {activeSubTab === 'aliases' && <AliasesTab aliases={aliasesConfig} onAliasChange={handleAliasChange} />}
+        {activeSubTab === 'aliases' && <AliasesTab aliases={aliasesConfig} modelOptions={modelOptions} onAliasChange={handleAliasChange} />}
 
       </div>
     </div>

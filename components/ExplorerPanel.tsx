@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronRight, FolderOpen, Sparkles } from 'lucide-react';
+import { ChevronRight, FolderOpen } from 'lucide-react';
 import { getFileIcon, getFolderIcon } from '../utils/labelProvider';
+import type { FileNode } from '@/types';
 
 interface Props {
   fileTree: FileNode[];
@@ -11,17 +12,8 @@ interface Props {
   onUpload: (files: FileList | File[], paths?: string[]) => void;
   hasProject: boolean;
   width?: number;
-  planPhaseDone?: boolean;
   modernFileTree?: FileNode[];       // Output directory tree from @parcel/watcher refresh
   modernFolderBasename?: string;     // Display name for the output folder (e.g. "Demo-5")
-}
-
-interface FileNode {
-  name: string;
-  path: string;
-  type: 'file' | 'directory';
-  children?: FileNode[];
-  migrated?: boolean;
 }
 
 function FileItem({
@@ -85,7 +77,7 @@ function FileItem({
   );
 }
 
-export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, onUpload, hasProject, width, planPhaseDone, modernFileTree = [], modernFolderBasename }: Props) {
+export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, onUpload, hasProject, width, modernFileTree = [], modernFolderBasename }: Props) {
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     const items = e.dataTransfer.items;

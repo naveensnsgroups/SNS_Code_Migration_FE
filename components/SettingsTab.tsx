@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, Eye, EyeOff, Plus, Trash2, Sliders, Cpu, Key, HelpCircle, Check, Settings } from 'lucide-react';
+import { Search, Eye, EyeOff, Plus, Trash2, Sliders, HelpCircle, Check, Settings } from 'lucide-react';
+import { DEFAULT_PROVIDER_MODELS } from '@/constants/models';
 
 interface SettingField {
   id: string;
@@ -28,7 +29,7 @@ const SETTING_FIELDS: SettingField[] = [
     label: 'Anthropic Models',
     description: 'List of official and custom Anthropic Claude models available for code modernization.',
     type: 'list',
-    defaultValue: ['claude-sonnet-4-6', 'claude-sonnet-4-5', 'claude-opus-4-6', 'claude-opus-4-5'],
+    defaultValue: DEFAULT_PROVIDER_MODELS.anthropic,
   },
   {
     id: 'openai_api_key',
@@ -44,7 +45,7 @@ const SETTING_FIELDS: SettingField[] = [
     label: 'OpenAI Models',
     description: 'List of official OpenAI GPT models available for modernization loops.',
     type: 'list',
-    defaultValue: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
+    defaultValue: DEFAULT_PROVIDER_MODELS.openai,
   },
   {
     id: 'google_api_key',
@@ -60,7 +61,7 @@ const SETTING_FIELDS: SettingField[] = [
     label: 'Google Models',
     description: 'Google Gemini generative models registered for scanning and conversions.',
     type: 'list',
-    defaultValue: ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemma-4-26b-a4b-it'],
+    defaultValue: DEFAULT_PROVIDER_MODELS.google,
   },
   {
     id: 'google_max_retries',
@@ -100,7 +101,7 @@ const SETTING_FIELDS: SettingField[] = [
     label: 'Grok Models',
     description: 'List of Grok models available for code modernization.',
     type: 'list',
-    defaultValue: ['grok-2', 'grok-2-mini'],
+    defaultValue: DEFAULT_PROVIDER_MODELS.grok,
   },
   {
     id: 'groq_api_key',
@@ -116,7 +117,7 @@ const SETTING_FIELDS: SettingField[] = [
     label: 'Groq Models',
     description: 'List of official Groq models available for code modernization.',
     type: 'list',
-    defaultValue: ['llama3-70b-8192', 'llama3-8b-8192', 'mixtral-8x7b-32768'],
+    defaultValue: DEFAULT_PROVIDER_MODELS.groq,
   },
   {
     id: 'openrouter_api_key',
@@ -132,7 +133,7 @@ const SETTING_FIELDS: SettingField[] = [
     label: 'OpenRouter Models',
     description: 'List of OpenRouter models available for code modernization.',
     type: 'list',
-    defaultValue: ['meta-llama/llama-3-70b-instruct', 'deepseek/deepseek-chat', 'mistralai/mixtral-8x7b-instruct'],
+    defaultValue: DEFAULT_PROVIDER_MODELS.openrouter,
   },
   {
     id: 'mistral_api_key',
@@ -148,7 +149,7 @@ const SETTING_FIELDS: SettingField[] = [
     label: 'Mistral Models',
     description: 'List of Mistral AI models available for code modernization. codestral-latest is recommended for code-heavy migrations.',
     type: 'list',
-    defaultValue: ['codestral-latest', 'mistral-large-latest', 'mistral-small-latest', 'devstral-latest'],
+    defaultValue: DEFAULT_PROVIDER_MODELS.mistral,
   },
   {
     id: 'mistral_max_retries',
@@ -188,7 +189,7 @@ const SETTING_FIELDS: SettingField[] = [
     label: 'Hugging Face Models',
     description: 'List of Hugging Face models available for code modernization.',
     type: 'list',
-    defaultValue: ['meta-llama/Meta-Llama-3-70B-Instruct', 'mistralai/Mixtral-8x7B-Instruct-v0.1'],
+    defaultValue: DEFAULT_PROVIDER_MODELS.huggingface,
   },
   {
     id: 'general_backend_url',
