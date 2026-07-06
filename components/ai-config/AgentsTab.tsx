@@ -9,7 +9,7 @@
 // =============================================================================
 'use client';
 
-import { Settings, Layers, Terminal, Cpu, ToggleLeft, ToggleRight, Tag, ExternalLink } from 'lucide-react';
+import { Settings, Layers, Terminal, Cpu, ToggleLeft, ToggleRight, ExternalLink } from 'lucide-react';
 
 export interface AgentConfig {
   id: string;

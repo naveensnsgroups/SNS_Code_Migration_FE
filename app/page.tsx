@@ -14,7 +14,7 @@ import { useMigration }  from '@/hooks/useMigration';
 import { usePanelResize } from '@/hooks/useResize';
 import { useBackendUrl }  from '@/hooks/useSettings';
 import { useNotifications } from '@/context/NotificationContext';
-import type { MigrationStatus, TargetStack } from '@/types';
+import type { MigrationStatus } from '@/types';
 
 // ── Status Label Map ───────────────────────────────────────────────────────────
 
@@ -60,11 +60,11 @@ export default function HomePage() {
     selectedFile, legacyCode, modernCode,
     logs, progress, currentFile, phases,
     modernFileTree, modernFolderBasename,
-    tokenUsage, isRunning, hasProject, planPhaseDone,
+    tokenUsage, isRunning, hasProject,
     activeTool, toolCallHistory,
     handleUpload, handleStart, handleStop, handlePause, handleSelectFile, clearSelectedFile,
     handleDownload,
-  } = useMigration(backendUrl, settingsTrigger, notify);
+  } = useMigration(backendUrl, notify);
 
   // Fire notifications on status transitions (SNS IDE MessageService pattern)
   useEffect(() => {
@@ -173,7 +173,6 @@ export default function HomePage() {
             onUpload={handleUpload}
             hasProject={hasProject}
             width={sidebarWidth}
-            planPhaseDone={planPhaseDone}
             modernFileTree={modernFileTree}
             modernFolderBasename={modernFolderBasename}
           />
@@ -272,12 +271,20 @@ export default function HomePage() {
           {STATUS_LABEL[status]}
         </span>
         {isRunning && <span className="status-bar__item">{progress}%</span>}
-        {tokenUsage && tokenUsage.estimatedCost > 0 && (
-          <span className="status-bar__item" style={{ gap: '4px', color: 'var(--text-success)' }}>
+        {/* estimatedCost is null when no pricing rate is configured for the
+            model(s) used — the badge is simply omitted rather than showing a
+            fabricated $0.00. costIncomplete marks a real but partial sum. */}
+        {tokenUsage && tokenUsage.estimatedCost !== null && tokenUsage.estimatedCost > 0 && (
+          <span
+            className="status-bar__item"
+            style={{ gap: '4px', color: 'var(--text-success)' }}
+            title={tokenUsage.costIncomplete ? 'Partial estimate — a pricing rate is missing for at least one model used' : undefined}
+          >
             <DollarSign size={11} />
             {tokenUsage.estimatedCost < 0.01
               ? '<$0.01'
               : `$${tokenUsage.estimatedCost.toFixed(4)}`}
+            {tokenUsage.costIncomplete ? '*' : ''}
           </span>
         )}
         {/* Notification Bell — SNS IDE status bar bell pattern */}

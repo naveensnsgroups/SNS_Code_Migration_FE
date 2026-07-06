@@ -14,7 +14,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { LogEntry, MigrationStatus } from '@/types';
+import type { LogEntry } from '@/types';
 import type { LiveStatusData, AlertItem, ToolCallHistoryItem } from '@/components/live-status/types';
 
 // ── Log-derived utilities (agent/stage/fileCount/alerts/activity) ─────────────
@@ -99,8 +99,6 @@ function deriveRecentActivity(logs: LogEntry[]): string[] {
 
 export function useLiveStatus(
   logs:            LogEntry[],
-  status:          MigrationStatus,
-  isRunning:       boolean,
   progress:        number,
   currentFile:     string,
   /** Direct SSE state from useMigration — no log parsing. Always accurate. */

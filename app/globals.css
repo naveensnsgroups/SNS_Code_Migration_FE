@@ -625,184 +625,6 @@ body {
 .btn--secondary:hover { background: var(--bg-hover); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* ── Live Status Panel ──────────────────────────────────────────────────── */
-/* Inserted inside Operational Panel (ai-panel__body) above PipelineProgress  */
-
-/* Status header row */
-.live-status__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-.live-status__badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
-  font-family: var(--font-mono);
-  font-weight: 600;
-}
-.live-status__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.live-status__dot--running { background: var(--text-success); animation: blink 1.4s ease-in-out infinite; }
-.live-status__dot--scanning { background: var(--accent-blue); animation: blink 1s ease-in-out infinite; }
-.live-status__dot--complete { background: var(--text-success); }
-.live-status__dot--error    { background: var(--text-error); }
-.live-status__dot--idle     { background: var(--text-muted); }
-.live-status__dot--paused   { background: var(--text-warning); }
-
-.live-status__badge--running  { color: var(--text-success); }
-.live-status__badge--scanning { color: var(--accent-blue); }
-.live-status__badge--complete { color: var(--text-success); }
-.live-status__badge--error    { color: var(--text-error); }
-.live-status__badge--idle     { color: var(--text-muted); }
-.live-status__badge--paused   { color: var(--text-warning); }
-
-/* Key-value info rows */
-.live-status__rows {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 8px;
-}
-.live-status__row {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-height: 16px;
-}
-.live-status__key {
-  font-size: 9.5px;
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  min-width: 46px;
-  flex-shrink: 0;
-}
-.live-status__val {
-  font-size: 11px;
-  font-family: var(--font-mono);
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: 1;
-}
-.live-status__val--muted { color: var(--text-secondary); }
-.live-status__val--file  { color: var(--text-info); }
-
-/* Progress inside live status — uses existing .progress-bar tokens */
-.live-status__progress {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-bottom: 8px;
-}
-.live-status__progress-label {
-  display: flex;
-  justify-content: space-between;
-  font-size: 10px;
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-}
-.live-status__progress-bar {
-  height: 3px;
-  background: var(--bg-tertiary);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.live-status__progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--accent-blue), var(--accent-green));
-  border-radius: 2px;
-  transition: width 0.5s ease;
-}
-
-/* Indeterminate — animated shimmer, no fake %, shown only when no real data */
-.live-status__progress-fill--indeterminate {
-  width: 35%;
-  background: linear-gradient(90deg, transparent, var(--accent-blue), transparent);
-  animation: progress-shimmer 1.6s ease-in-out infinite;
-}
-@keyframes progress-shimmer {
-  0%   { transform: translateX(-200%); }
-  100% { transform: translateX(500%); }
-}
-
-/* Active Tool section */
-.live-status__tool {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 6px 8px;
-  background: rgba(86,156,214,0.06);
-  border-left: 2px solid #569cd6;
-  border-radius: 0 3px 3px 0;
-  margin-bottom: 8px;
-}
-.live-status__tool-label {
-  font-size: 9.5px;
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.live-status__tool-name {
-  font-size: 11px;
-  font-family: var(--font-mono);
-  color: var(--accent-yellow);
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.live-status__tool-args {
-  font-size: 10px;
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Alert rows */
-.live-status__alerts {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-bottom: 6px;
-}
-.live-status__alert {
-  display: flex;
-  align-items: flex-start;
-  gap: 5px;
-  font-size: 10px;
-  font-family: var(--font-mono);
-  line-height: 1.4;
-  padding: 2px 0;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.live-status__alert:last-child { border-bottom: none; }
-.live-status__alert-icon { flex-shrink: 0; padding-top: 1px; }
-.live-status__alert--warn  { color: var(--text-warning); }
-.live-status__alert--error { color: var(--text-error); }
-.live-status__alert-msg    { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* Empty state — shown when idle with no project */
-.live-status__empty {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  padding: 4px 0;
-  font-style: italic;
-}
-
 /* ── Live Status Overlay (ls-overlay) ──────────────────────────────────── */
 /* Covers ai-panel__body when toggle is active. position:absolute, inset:0  */
 
@@ -1321,6 +1143,14 @@ body {
 .tool-call__time { margin-left: auto; font-size: 10px; color: var(--text-muted); flex-shrink: 0; }
 
 .tool-call__result { padding-left: 16px; padding-top: 2px; }
+.tool-call__result-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 2px 0 2px 2px;
+  font-weight: 600;
+}
 .tool-call__result-content {
   padding: 6px 10px;
   font-family: var(--font-mono);
@@ -1336,6 +1166,26 @@ body {
   margin: 0 0 4px 0;
   border-left: 2px solid var(--border-color);
 }
+
+/* ── Terminal: Turn markers ("Submitting query to LLM (Turn N)") ── */
+.turn-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 1px 12px 1px 16px;
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+.turn-row::before {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-color);
+  opacity: 0.4;
+}
+.turn-row__text { flex-shrink: 0; font-style: italic; }
+.turn-row__time { flex-shrink: 0; }
 
 /* ── Terminal: Thinking / AI Request Rows — SNS IDE theia-thinking pattern ── */
 /* Source: snside/packages/ai-chat-ui/src/browser/style/index.css L891-1120    */

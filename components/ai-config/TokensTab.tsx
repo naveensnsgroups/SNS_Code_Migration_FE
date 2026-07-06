@@ -6,20 +6,32 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { fetchSessionTokens } from '@/services/api';
+import { Edit3, Check, X } from 'lucide-react';
+import { fetchSessionTokens, updateModelPricing } from '@/services/api';
+import type { TokenUsage } from '@/hooks/useMigration';
+
+export interface ModelPricingRate {
+  inputPerM: number;
+  outputPerM: number;
+  cacheWritePerM?: number;
+  cacheReadPerM?: number;
+}
+type ModelPricingConfig = Record<string, ModelPricingRate>;
+
+const PRICING_STORAGE_KEY = 'ai_config_model_pricing';
+
+function readModelPricing(): ModelPricingConfig {
+  try { return JSON.parse(localStorage.getItem(PRICING_STORAGE_KEY) || '{}'); } catch { return {}; }
+}
+
+function saveModelPricing(config: ModelPricingConfig): void {
+  localStorage.setItem(PRICING_STORAGE_KEY, JSON.stringify(config));
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-interface TokenUsage {
-  inputTokens: number;
-  outputTokens: number;
-  cachedInputTokens?: number;
-  readCachedInputTokens?: number;
-  totalTokens: number;
-  estimatedCost: number;
-  model?: string;
-  updatedAt?: number;
-}
+// TokenUsage (inputTokens/outputTokens/estimatedCost: number|null/etc.) is
+// imported from hooks/useMigration.ts — see the comment there for why
+// estimatedCost can be null (no pricing rate configured for that model).
 
 interface ModelBreakdown {
   modelId: string;
@@ -29,6 +41,14 @@ interface ModelBreakdown {
   readCachedInputTokens?: number;
   totalTokens: number;
   lastUsed?: string;
+  /** null = no pricing rate configured for this exact model. */
+  estimatedCost: number | null;
+}
+
+function formatCost(cost: number | null): string {
+  if (cost === null) return '—';
+  if (cost === 0) return '$0.0000';
+  return cost < 0.01 ? '<$0.01' : `$${cost.toFixed(4)}`;
 }
 
 interface Props {
@@ -53,18 +73,90 @@ function formatDistanceToNow(dateInput: string | number | Date | undefined): str
   return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
 }
 
+// Inline editable rate — the only place a pricing number for a model can be
+// entered. Nothing elsewhere in the app invents a default; if this has never
+// been used for a model, its cost is "—" everywhere.
+function RateEditorCell({
+  modelId,
+  cost,
+  onSaved,
+}: {
+  modelId: string;
+  cost: number | null;
+  onSaved: (modelId: string, rate: ModelPricingRate) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [inputPerM, setInputPerM] = useState('');
+  const [outputPerM, setOutputPerM] = useState('');
+
+  const startEdit = () => {
+    const existing = readModelPricing()[modelId];
+    setInputPerM(existing ? String(existing.inputPerM) : '');
+    setOutputPerM(existing ? String(existing.outputPerM) : '');
+    setEditing(true);
+  };
+
+  const save = () => {
+    const inVal  = parseFloat(inputPerM);
+    const outVal = parseFloat(outputPerM);
+    if (!Number.isFinite(inVal) || !Number.isFinite(outVal) || inVal < 0 || outVal < 0) return;
+    const rate: ModelPricingRate = { inputPerM: inVal, outputPerM: outVal };
+    const config = readModelPricing();
+    config[modelId] = rate;
+    saveModelPricing(config);
+    onSaved(modelId, rate);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+        <input
+          type="number" step="0.01" min="0" placeholder="in $/M"
+          value={inputPerM} onChange={e => setInputPerM(e.target.value)}
+          style={{ width: '56px', fontSize: '11px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: '3px', color: 'var(--text-primary)', padding: '2px 4px' }}
+        />
+        <input
+          type="number" step="0.01" min="0" placeholder="out $/M"
+          value={outputPerM} onChange={e => setOutputPerM(e.target.value)}
+          style={{ width: '56px', fontSize: '11px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: '3px', color: 'var(--text-primary)', padding: '2px 4px' }}
+        />
+        <button onClick={save} style={{ background: 'none', border: 'none', color: 'var(--text-success)', cursor: 'pointer', padding: 0 }} title="Save rate">
+          <Check size={13} />
+        </button>
+        <button onClick={() => setEditing(false)} style={{ background: 'none', border: 'none', color: 'var(--text-error)', cursor: 'pointer', padding: 0 }} title="Cancel">
+          <X size={13} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+      <span style={{ color: cost !== null ? 'var(--text-secondary)' : 'var(--text-muted)' }}>
+        {formatCost(cost)}
+      </span>
+      <button
+        onClick={startEdit}
+        title={`Set $/1M rate for ${modelId}`}
+        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0, display: 'flex' }}
+      >
+        <Edit3 size={11} />
+      </button>
+    </div>
+  );
+}
+
 export default function TokensTab({
   tokenUsage,
   sessionId,
   backendUrl = 'http://localhost:4000',
 }: Props) {
   const [modelBreakdown, setModelBreakdown] = useState<ModelBreakdown[]>([]);
-  const [loading, setLoading] = useState(false);
 
   // Fetch persisted data + model breakdown from backend
   const fetchFromBackend = useCallback(() => {
     if (!sessionId) return;
-    setLoading(true);
     fetchSessionTokens(backendUrl, sessionId)
       .then(data => {
         if (data.modelBreakdown && data.modelBreakdown.length > 0) {
@@ -73,13 +165,22 @@ export default function TokensTab({
           setModelBreakdown(sorted);
         }
       })
-      .catch(() => { /* non-critical */ })
-      .finally(() => setLoading(false));
+      .catch(() => { /* non-critical */ });
   }, [sessionId, backendUrl]);
 
   useEffect(() => {
     fetchFromBackend();
   }, [fetchFromBackend]);
+
+  // Push a newly-configured rate to the backend so /tokens recomputes cost
+  // immediately (retroactively, over already-recorded token history) instead
+  // of only taking effect on the next migration start.
+  const handleRateSaved = useCallback((modelId: string, rate: ModelPricingRate) => {
+    if (!sessionId) return;
+    updateModelPricing(backendUrl, sessionId, { [modelId]: rate })
+      .then(fetchFromBackend)
+      .catch(() => { /* the rate is still saved locally for the next run */ });
+  }, [sessionId, backendUrl, fetchFromBackend]);
 
   // When live SSE tokenUsage updates, fetch fresh breakdown in real-time.
   // Depend on the primitive totalTokens value — NOT the tokenUsage object itself.
@@ -118,6 +219,15 @@ export default function TokensTab({
   const totalCachedInput = modelBreakdown.reduce((sum, m) => sum + (m.cachedInputTokens ?? 0), 0);
   const totalReadCachedInput = modelBreakdown.reduce((sum, m) => sum + (m.readCachedInputTokens ?? 0), 0);
   const totalTokens = totalInput + totalOutput + totalCachedInput;
+  // Sum only the models that HAVE a configured rate — null (unpriced) for a
+  // model is skipped, never treated as $0. If every model is unpriced, the
+  // total itself is null ("—"); if some are priced and some aren't, the sum
+  // is real but partial, flagged via anyCostIncomplete.
+  const pricedModels = modelBreakdown.filter(m => m.estimatedCost !== null);
+  const totalCost = pricedModels.length > 0
+    ? pricedModels.reduce((sum, m) => sum + (m.estimatedCost ?? 0), 0)
+    : null;
+  const anyCostIncomplete = totalCost !== null && pricedModels.length < modelBreakdown.length;
 
   return (
     <div style={{
@@ -191,7 +301,7 @@ export default function TokensTab({
                 padding: '10px 12px',
                 fontWeight: 600,
                 color: 'var(--text-primary)',
-                width: hasCacheData ? '13%' : '18.75%',
+                width: hasCacheData ? '11%' : '15%',
               }} title="'Input Tokens' + 'Output Tokens'">
                 Total Tokens
               </th>
@@ -200,7 +310,16 @@ export default function TokensTab({
                 padding: '10px 12px',
                 fontWeight: 600,
                 color: 'var(--text-primary)',
-                width: hasCacheData ? '13%' : '18.75%',
+                width: hasCacheData ? '11%' : '15%',
+              }} title="Estimated cost using the $/1M-token rate you configured for this model in Settings. Shows '—' if no rate is configured — never a guessed number.">
+                Cost
+              </th>
+              <th style={{
+                textAlign: 'left',
+                padding: '10px 12px',
+                fontWeight: 600,
+                color: 'var(--text-primary)',
+                width: hasCacheData ? '11%' : '15%',
               }}>
                 Last Used
               </th>
@@ -240,6 +359,9 @@ export default function TokensTab({
                   <td style={{ padding: '8px 12px', color: 'var(--text-secondary)', verticalAlign: 'top' }} title="'Input Tokens' + 'Output Tokens'">
                     {itemTotal.toLocaleString()}
                   </td>
+                  <td style={{ padding: '8px 12px', verticalAlign: 'top' }}>
+                    <RateEditorCell modelId={item.modelId} cost={item.estimatedCost} onSaved={handleRateSaved} />
+                  </td>
                   <td style={{ padding: '8px 12px', color: 'var(--text-secondary)', verticalAlign: 'top' }}>
                     {formatDistanceToNow(item.lastUsed)}
                   </td>
@@ -264,6 +386,10 @@ export default function TokensTab({
               )}
               <td style={{ padding: '10px 12px', color: 'var(--text-primary)' }}>{totalOutput.toLocaleString()}</td>
               <td style={{ padding: '10px 12px', color: 'var(--text-primary)' }}>{totalTokens.toLocaleString()}</td>
+              <td style={{ padding: '10px 12px', color: 'var(--text-primary)' }}>
+                {totalCost === null ? '—' : formatCost(totalCost)}
+                {totalCost !== null && anyCostIncomplete ? '*' : ''}
+              </td>
               <td style={{ padding: '10px 12px' }}></td>
             </tr>
           </tfoot>
@@ -291,7 +417,11 @@ export default function TokensTab({
         >
           <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0-1A6 6 0 1 0 8 2a6 6 0 0 0 0 12zM7.5 7.5a.5.5 0 0 1 1 0v4a.5.5 0 0 1-1 0v-4zm.5-2a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5z" />
         </svg>
-        <span>Token usage is tracked since the start of the application and is not persisted.</span>
+        <span>
+          Token usage is tracked per session and persisted on the backend — it survives a page reload.
+          {anyCostIncomplete ? ' * = partial cost: at least one model used has no configured pricing rate.' : ''}
+          {' '}Configure per-model $/1M rates in Settings to see cost — nothing is estimated without one.
+        </span>
       </div>
 
       <style>{`

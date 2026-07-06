@@ -104,15 +104,21 @@ function ServerRow({ server }: { server: MCPServer }) {
             <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>No tools exposed by this server.</div>
           )}
 
-          {/* Connect / Disconnect button */}
+          {/* Connect / Disconnect — the backend only reports MCP status today
+              (GET /api/mcp/status); there is no connect/disconnect endpoint to
+              call, so this control is honestly disabled rather than looking
+              interactive and doing nothing. */}
           <button
+            disabled
+            title="Not yet supported — the backend does not expose an MCP connect/disconnect endpoint"
             style={{
               marginTop: '10px', display: 'flex', alignItems: 'center', gap: '5px',
-              padding: '4px 12px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer', border: 'none',
-              background: isConnected ? 'rgba(244,135,113,0.15)' : 'rgba(78,201,176,0.15)',
-              color: isConnected ? 'var(--text-error)' : 'var(--text-success)',
+              padding: '4px 12px', borderRadius: '4px', fontSize: '11px', cursor: 'not-allowed', border: 'none',
+              background: 'rgba(120,120,120,0.1)',
+              color: 'var(--text-muted)',
+              opacity: 0.6,
             }}
-            onClick={e => { e.stopPropagation(); /* connect/disconnect not yet implemented */ }}
+            onClick={e => e.stopPropagation()}
           >
             {isConnected ? <ZapOff size={11} /> : <Zap size={11} />}
             {isConnected ? 'Disconnect' : 'Connect'}

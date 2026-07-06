@@ -125,7 +125,7 @@ interface StreamGroup {
   chunks: LogEntry[];
 }
 interface SingleLog {
-  kind: 'thinking' | 'todo' | 'phase' | 'generic';
+  kind: 'turn' | 'todo' | 'phase' | 'generic';
   log: LogEntry;
 }
 type Block = ToolGroup | StreamGroup | SingleLog;
@@ -137,11 +137,11 @@ function groupLogs(logs: LogEntry[]): Block[] {
   while (i < logs.length) {
     const log = logs[i];
     const msg = log.message;
-    const lvl = (log as any).level as string;
+    const lvl = log.level;
 
     if (lvl === 'stream') {
       const chunks: LogEntry[] = [log]; i++;
-      while (i < logs.length && (logs[i] as any).level === 'stream') {
+      while (i < logs.length && logs[i].level === 'stream') {
         chunks.push(logs[i]); i++;
       }
       blocks.push({ kind: 'stream', chunks }); continue;
@@ -162,7 +162,9 @@ function groupLogs(logs: LogEntry[]): Block[] {
       i++; continue;
     }
     if (msg.startsWith('[AI Request]') || msg.startsWith('[AI Response]')) {
-      blocks.push({ kind: 'thinking', log }); i++; continue;
+      // These are turn markers ("Submitting query to LLM (Turn N)"), NOT the
+      // model's reasoning. Real reasoning arrives as 'stream' chunks (StreamBlock).
+      blocks.push({ kind: 'turn', log }); i++; continue;
     }
     if (msg.includes('[Todo]') || msg.includes('tasks completed')) {
       blocks.push({ kind: 'todo', log }); i++; continue;
@@ -247,9 +249,16 @@ function ToolRow({ group }: { group: ToolGroup }) {
           <span className="tool-call__time">{group.callLog.timestamp}</span>
         </summary>
 
-        {/* Result body — shows dataText (Tool Data) or responseText (Tool Response) fallback */}
+        {/* Expanded body: full arguments the tool was called with, then the result */}
+        {argsJson && argsJson.trim() !== '{}' && (
+          <div className="tool-call__result">
+            <div className="tool-call__result-label">Arguments</div>
+            <ResultContent text={argsJson} />
+          </div>
+        )}
         {bodyText && (
           <div className="tool-call__result">
+            <div className="tool-call__result-label">Result</div>
             <ResultContent text={bodyText} />
           </div>
         )}
@@ -258,17 +267,14 @@ function ToolRow({ group }: { group: ToolGroup }) {
   );
 }
 
-// ── ThinkingRow — exact SNS IDE theia-thinking pattern ──────────────────────
-// Source: thinking-part-renderer.tsx:34-43
-// <div className='theia-thinking'><details><summary>Thinking</summary><pre>...</pre></details></div>
-function ThinkingRow({ log }: { log: LogEntry }) {
+// ── TurnRow — subtle divider for "Submitting query to LLM (Turn N)" markers ──
+// These are NOT reasoning; real reasoning is streamed and shown in StreamBlock.
+function TurnRow({ log }: { log: LogEntry }) {
   const body = log.message.replace(/^\[AI (Request|Response)\]\s*/, '').trim();
   return (
-    <div className="thinking-row">
-      <details>
-        <summary>Thinking</summary>
-        <pre>{body}</pre>
-      </details>
+    <div className="turn-row">
+      <span className="turn-row__text">{body}</span>
+      <span className="turn-row__time">{log.timestamp}</span>
     </div>
   );
 }
@@ -325,6 +331,10 @@ function GenericRow({ log }: { log: LogEntry }) {
     warning: <AlertTriangle size={12} style={{ color: 'var(--text-warning)' }} />,
     command: <ChevronRight  size={12} style={{ color: 'var(--accent-yellow)' }} />,
     info:    <Info          size={12} style={{ color: 'var(--text-info)', opacity: 0.8 }} />,
+    // 'stream' entries are always grouped into StreamBlock before reaching
+    // GenericRow (see groupLogs above) — this exists only to satisfy the
+    // Record<LogLevel, ...> exhaustiveness check, it never actually renders.
+    stream:  <Info          size={12} style={{ color: 'var(--text-info)', opacity: 0.8 }} />,
   };
 
   const parsed = parseTagPrefix(log.message);
@@ -383,10 +393,10 @@ export default function TerminalPanel({ logs, isRunning, height }: Props) {
             Ready. Upload a project and click Start Migration.
           </div>
         ) : (
-          blocks.map((block, idx) => {
+          blocks.map((block) => {
             if (block.kind === 'tool')     return <ToolRow     key={block.callLog.id} group={block} />;
             if (block.kind === 'stream')   return <StreamBlock key={block.chunks[0].id} group={block} />;
-            if (block.kind === 'thinking') return <ThinkingRow key={block.log.id} log={block.log} />;
+            if (block.kind === 'turn')     return <TurnRow     key={block.log.id} log={block.log} />;
             if (block.kind === 'todo')     return <TodoRow     key={block.log.id} log={block.log} />;
             if (block.kind === 'phase')    return <PhaseRow    key={block.log.id} log={block.log} />;
             return <GenericRow key={block.log.id} log={block.log} />;

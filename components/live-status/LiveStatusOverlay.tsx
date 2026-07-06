@@ -234,6 +234,28 @@ export default function LiveStatusOverlay({ data, status, isRunning, onClose }: 
               ))}
             </div>
           </div>
+          {(recentActivity.length > 0 || alerts.length > 0) && <Divider />}
+        </>
+      )}
+
+      {/* ── Recent Activity ─────────────────────────────────────────────────
+          Was computed by useLiveStatus (last 5 meaningful log messages) but
+          never actually rendered anywhere — silently dropped data. Mirrors
+          the Alerts section's structure/styling below. */}
+      {recentActivity.length > 0 && (
+        <>
+          <div className="ls-overlay__section">
+            <SectionTitle>Recent Activity</SectionTitle>
+            <div className="ls-overlay__alerts">
+              {recentActivity.map((message, i) => (
+                <div key={i} className="ls-overlay__alert">
+                  <span className="ls-overlay__alert-msg" title={message}>
+                    {message}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
           {alerts.length > 0 && <Divider />}
         </>
       )}

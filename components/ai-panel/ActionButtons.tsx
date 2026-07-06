@@ -27,8 +27,12 @@ interface Props {
   onPause:  () => void;
 }
 
+// Note: `detectedStack` and `planPhaseDone` are received but not yet used —
+// reserved for the Stage-2 "Start Migration" button (see comment above),
+// which isn't built yet. Not destructured below to avoid an unused-var
+// warning; they remain valid Props for when that button is implemented.
 export default function ActionButtons({
-  status, detectedStack, hasApiKey, hasModel, hasProject, planPhaseDone,
+  status, hasApiKey, hasModel, hasProject,
   onStart, onStop, onPause,
 }: Props) {
   const isRunning  = ['scanning', 'planning'].includes(status);

@@ -13,7 +13,10 @@ export type MigrationStatus =
   | 'error'
   | 'paused';
 
-export type LogLevel = 'info' | 'success' | 'error' | 'warning' | 'command';
+// 'stream' = a raw streamed chunk of the model's own reasoning text (see
+// AgentExecutor's 'log' broadcast with level: 'stream'), rendered distinctly
+// by TerminalPanel — not a real log severity level.
+export type LogLevel = 'info' | 'success' | 'error' | 'warning' | 'command' | 'stream';
 
 export interface LogEntry {
   id: string;
@@ -59,54 +62,16 @@ export interface FileNode {
   language?: string;
 }
 
-export interface MigrationSession {
-  sessionId: string;
-  status: MigrationStatus;
-  projectPath: string;
-  detectedStack?: DetectedStack;
-  targetStack?: TargetStack;
-  totalFiles: number;
-  completedFiles: number;
-  currentFile?: string;
-  startedAt?: string;
-  completedAt?: string;
-  error?: string;
-}
-
 export interface MigrationPhase {
   id: string;
   label: string;
   status: 'pending' | 'active' | 'done' | 'error';
 }
 
-export interface SSEEvent {
-  type:
-    | 'log'
-    | 'progress'
-    | 'phase_change'
-    | 'file_migrated'
-    | 'complete'
-    | 'error'
-    | 'heartbeat';
-  data: unknown;
-  timestamp: string;
-}
-
-export interface ScanResult {
-  sessionId: string;
-  fileTree: FileNode[];
-  detectedStack: DetectedStack;
-}
-
 export interface MigrateStartRequest {
   sessionId: string;
   targetStack: TargetStack;
   apiKey: string;
-}
-
-export interface ApiError {
-  error: string;
-  code: string;
 }
 
 // AI_PROVIDERS: provider labels only.
