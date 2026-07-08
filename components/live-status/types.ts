@@ -1,8 +1,3 @@
-// =============================================================================
-//  components/live-status/types.ts
-//  Shared TypeScript types for the Live Status Overlay system.
-// =============================================================================
-
 /** A single completed tool call entry shown in the live tool feed. */
 export interface ToolCallHistoryItem {
   /** Unique key for React list rendering. */

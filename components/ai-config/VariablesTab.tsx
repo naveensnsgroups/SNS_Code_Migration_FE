@@ -1,18 +1,11 @@
-// =============================================================================
-//  components/ai-config/VariablesTab.tsx
-//  Global variables shared across all agents — editable values persisted
-//  to localStorage. Mirrors the SNS IDE AI Variables panel.
-//
-//  Every row below reads/writes a localStorage key that another real part of
-//  the app actually uses. Rows for values with NO real client-side source
-//  (targetStack, legacyPath, modernPath — these live only in the backend
-//  session and are never sent to the browser) were removed rather than
-//  wired to a fake key, since that would just move the problem.
-// =============================================================================
+// Global variables shared across all agents. Every row reads/writes a localStorage key
+// that a real part of the app uses — values with no client-side source were removed
+// rather than wired to a fake key.
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Globe, Edit3, Check, X } from 'lucide-react';
+import { ALL_PROVIDERS } from '@/constants/models';
 
 interface GlobalVar {
   id: string;
@@ -20,8 +13,6 @@ interface GlobalVar {
   description: string;
   storageKey: string;
 }
-
-const PROVIDERS = ['anthropic', 'openai', 'google', 'grok', 'groq', 'openrouter', 'mistral', 'huggingface'];
 
 // These map to the SAME localStorage keys the rest of the app actually reads/writes —
 // verified against hooks/useSettings.ts, hooks/useMigration.ts, and AIConfigTab.tsx.
@@ -87,7 +78,7 @@ function EditableRow({ variable }: EditableRowProps) {
 
   return (
     <div style={{
-      background: 'rgba(30,30,30,0.3)', border: '1px solid var(--border-color)',
+      background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)',
       borderRadius: '6px', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px'
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -132,7 +123,7 @@ function EditableRow({ variable }: EditableRowProps) {
         <pre style={{
           fontFamily: 'var(--font-mono)', fontSize: '10px',
           color: 'var(--text-secondary)',
-          background: 'rgba(0,0,0,0.2)', padding: '4px 8px', borderRadius: '3px',
+          background: 'var(--bg-primary)', padding: '4px 8px', borderRadius: '3px',
           whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: '80px', overflowY: 'auto',
           margin: 0,
         }}>
@@ -142,7 +133,7 @@ function EditableRow({ variable }: EditableRowProps) {
         <div style={{
           fontFamily: 'var(--font-mono)', fontSize: '11px',
           color: value ? 'var(--accent-green)' : 'var(--text-muted)',
-          background: 'rgba(0,0,0,0.2)', padding: '4px 8px', borderRadius: '3px',
+          background: 'var(--bg-primary)', padding: '4px 8px', borderRadius: '3px',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%'
         }}>
           {value || '— not set —'}
@@ -158,7 +149,7 @@ function ApiKeyStatusRow() {
   const [configured, setConfigured] = useState<string[]>([]);
 
   useEffect(() => {
-    const found = PROVIDERS.filter(p => {
+    const found = ALL_PROVIDERS.filter(p => {
       const raw = localStorage.getItem(`setting_${p}_api_key`);
       if (!raw) return false;
       try { return !!JSON.parse(raw)?.trim(); } catch { return !!raw.trim(); }
@@ -168,7 +159,7 @@ function ApiKeyStatusRow() {
 
   return (
     <div style={{
-      background: 'rgba(30,30,30,0.3)', border: '1px solid var(--border-color)',
+      background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)',
       borderRadius: '6px', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '6px'
     }}>
       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 600, color: 'var(--text-info)' }}>
@@ -180,7 +171,7 @@ function ApiKeyStatusRow() {
       <div style={{
         fontFamily: 'var(--font-mono)', fontSize: '11px',
         color: configured.length > 0 ? 'var(--accent-green)' : 'var(--text-muted)',
-        background: 'rgba(0,0,0,0.2)', padding: '4px 8px', borderRadius: '3px',
+        background: 'var(--bg-primary)', padding: '4px 8px', borderRadius: '3px',
       }}>
         {configured.length > 0 ? `Configured: ${configured.join(', ')}` : '— not set —'}
       </div>

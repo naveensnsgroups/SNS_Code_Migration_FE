@@ -1,8 +1,4 @@
-// =============================================================================
-//  components/ai-panel/PipelineProgress.tsx
-//  Live migration progress bar + phase status badges.
-//  Shown while migration is running or complete.
-// =============================================================================
+// Live migration progress bar + phase status badges.
 'use client';
 
 import { CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';

@@ -1,8 +1,3 @@
-// =============================================================================
-//  components/ai-config/TokensTab.tsx
-//
-//  Token Usage tab — exact replica of the SNS IDE AITokenUsageConfigurationWidget.
-// =============================================================================
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
@@ -10,7 +5,7 @@ import { Edit3, Check, X } from 'lucide-react';
 import { fetchSessionTokens, updateModelPricing } from '@/services/api';
 import type { TokenUsage } from '@/hooks/useMigration';
 
-export interface ModelPricingRate {
+interface ModelPricingRate {
   inputPerM: number;
   outputPerM: number;
   cacheWritePerM?: number;
@@ -28,10 +23,7 @@ function saveModelPricing(config: ModelPricingConfig): void {
   localStorage.setItem(PRICING_STORAGE_KEY, JSON.stringify(config));
 }
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-// TokenUsage (inputTokens/outputTokens/estimatedCost: number|null/etc.) is
-// imported from hooks/useMigration.ts — see the comment there for why
-// estimatedCost can be null (no pricing rate configured for that model).
+// TokenUsage.estimatedCost can be null — see hooks/useMigration.ts for why.
 
 interface ModelBreakdown {
   modelId: string;
@@ -53,9 +45,8 @@ function formatCost(cost: number | null): string {
 
 interface Props {
   tokenUsage?: TokenUsage;
-  isRunning?: boolean;
   sessionId?: string | null;
-  backendUrl?: string;
+  backendUrl: string;
 }
 
 // Helper to format timestamps exactly like formatDistanceToNow in SNS IDE
@@ -73,9 +64,7 @@ function formatDistanceToNow(dateInput: string | number | Date | undefined): str
   return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
 }
 
-// Inline editable rate — the only place a pricing number for a model can be
-// entered. Nothing elsewhere in the app invents a default; if this has never
-// been used for a model, its cost is "—" everywhere.
+// The only place a pricing rate can be entered — unset models show "—" everywhere else.
 function RateEditorCell({
   modelId,
   cost,
@@ -114,12 +103,12 @@ function RateEditorCell({
         <input
           type="number" step="0.01" min="0" placeholder="in $/M"
           value={inputPerM} onChange={e => setInputPerM(e.target.value)}
-          style={{ width: '56px', fontSize: '11px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: '3px', color: 'var(--text-primary)', padding: '2px 4px' }}
+          style={{ width: '56px', fontSize: '11px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '3px', color: 'var(--text-primary)', padding: '2px 4px' }}
         />
         <input
           type="number" step="0.01" min="0" placeholder="out $/M"
           value={outputPerM} onChange={e => setOutputPerM(e.target.value)}
-          style={{ width: '56px', fontSize: '11px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: '3px', color: 'var(--text-primary)', padding: '2px 4px' }}
+          style={{ width: '56px', fontSize: '11px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '3px', color: 'var(--text-primary)', padding: '2px 4px' }}
         />
         <button onClick={save} style={{ background: 'none', border: 'none', color: 'var(--text-success)', cursor: 'pointer', padding: 0 }} title="Save rate">
           <Check size={13} />
@@ -150,7 +139,7 @@ function RateEditorCell({
 export default function TokensTab({
   tokenUsage,
   sessionId,
-  backendUrl = 'http://localhost:4000',
+  backendUrl,
 }: Props) {
   const [modelBreakdown, setModelBreakdown] = useState<ModelBreakdown[]>([]);
 
@@ -172,9 +161,7 @@ export default function TokensTab({
     fetchFromBackend();
   }, [fetchFromBackend]);
 
-  // Push a newly-configured rate to the backend so /tokens recomputes cost
-  // immediately (retroactively, over already-recorded token history) instead
-  // of only taking effect on the next migration start.
+  // Pushes the rate to the backend so cost recomputes retroactively, not just on the next run.
   const handleRateSaved = useCallback((modelId: string, rate: ModelPricingRate) => {
     if (!sessionId) return;
     updateModelPricing(backendUrl, sessionId, { [modelId]: rate })
@@ -182,10 +169,8 @@ export default function TokensTab({
       .catch(() => { /* the rate is still saved locally for the next run */ });
   }, [sessionId, backendUrl, fetchFromBackend]);
 
-  // When live SSE tokenUsage updates, fetch fresh breakdown in real-time.
-  // Depend on the primitive totalTokens value — NOT the tokenUsage object itself.
-  // The parent creates a new tokenUsage object every render; using it as a dep
-  // would trigger this effect on every render, causing an infinite update loop.
+  // Depend on the primitive totalTokens, not the tokenUsage object — the parent creates a new
+  // object every render, so using it directly would trigger this on every render.
   useEffect(() => {
     if (tokenUsage && tokenUsage.totalTokens > 0) {
       fetchFromBackend();
@@ -213,16 +198,12 @@ export default function TokensTab({
     m => m.cachedInputTokens !== undefined || m.readCachedInputTokens !== undefined
   );
 
-  // Calculate totals
   const totalInput = modelBreakdown.reduce((sum, m) => sum + m.inputTokens, 0);
   const totalOutput = modelBreakdown.reduce((sum, m) => sum + m.outputTokens, 0);
   const totalCachedInput = modelBreakdown.reduce((sum, m) => sum + (m.cachedInputTokens ?? 0), 0);
   const totalReadCachedInput = modelBreakdown.reduce((sum, m) => sum + (m.readCachedInputTokens ?? 0), 0);
   const totalTokens = totalInput + totalOutput + totalCachedInput;
-  // Sum only the models that HAVE a configured rate — null (unpriced) for a
-  // model is skipped, never treated as $0. If every model is unpriced, the
-  // total itself is null ("—"); if some are priced and some aren't, the sum
-  // is real but partial, flagged via anyCostIncomplete.
+  // Unpriced models are skipped, never treated as $0 — null total means everything is unpriced.
   const pricedModels = modelBreakdown.filter(m => m.estimatedCost !== null);
   const totalCost = pricedModels.length > 0
     ? pricedModels.reduce((sum, m) => sum + (m.estimatedCost ?? 0), 0)

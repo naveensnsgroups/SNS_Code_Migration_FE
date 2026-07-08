@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, Eye, EyeOff, Plus, Trash2, Sliders, HelpCircle, Check, Settings } from 'lucide-react';
-import { DEFAULT_PROVIDER_MODELS } from '@/constants/models';
+import { Search, Eye, EyeOff, Plus, Trash2, Sliders, HelpCircle, Check, Settings, X } from 'lucide-react';
+import { DEFAULT_PROVIDER_MODELS, ALL_PROVIDERS } from '@/constants/models';
+import { DEFAULT_BACKEND_URL } from '@/hooks/useSettings';
+import { applyTheme } from '@/utils/theme';
 
 interface SettingField {
   id: string;
@@ -197,7 +199,7 @@ const SETTING_FIELDS: SettingField[] = [
     label: 'Backend API Service URL',
     description: 'The target port and host address of the running Express code migration server engine.',
     type: 'string',
-    defaultValue: 'http://localhost:4000',
+    defaultValue: DEFAULT_BACKEND_URL,
   },
   {
     id: 'general_local_output_path',
@@ -267,9 +269,8 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
     setSettings(loadedSettings);
 
     // Load selected model per provider from localStorage
-    const providers = ['anthropic', 'openai', 'google', 'grok', 'groq', 'openrouter', 'mistral', 'huggingface'];
     const sel: Record<string, string> = {};
-    for (const p of providers) {
+    for (const p of ALL_PROVIDERS) {
       const raw = localStorage.getItem(`setting_${p}_selected_model`);
       if (raw) {
         try { sel[p] = JSON.parse(raw); } catch { sel[p] = raw; }
@@ -309,7 +310,9 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
     const updated = { ...settings, [id]: value };
     setSettings(updated);
     localStorage.setItem(`setting_${id}`, JSON.stringify(value));
-    
+
+    if (id === 'general_theme') applyTheme(value);
+
     // Trigger callback
     if (onSettingsSaved) onSettingsSaved();
     
@@ -344,7 +347,7 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
           <span className="settings-title">Settings</span>
           {onClose && (
             <button className="settings-close" onClick={onClose} title="Close Settings">
-              ✕
+              <X size={13} />
             </button>
           )}
         </div>
@@ -508,9 +511,7 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
                     localStorage.setItem(key, JSON.stringify(model));
                     setSelectedModels(prev => ({ ...prev, [provider]: model }));
 
-                    // ── AUTO-SWITCH PROVIDER ────────────────────────────────────
-                    // Clicking a model in any provider's list makes that provider
-                    // the ACTIVE provider for the next migration run.
+                    // Clicking a model makes its provider the active one for the next run.
                     localStorage.setItem('setting_selected_provider', JSON.stringify(provider));
                     setActiveProvider(provider); // ← update sidebar badge instantly
 

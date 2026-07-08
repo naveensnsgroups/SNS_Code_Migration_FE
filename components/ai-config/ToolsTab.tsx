@@ -1,10 +1,5 @@
-// =============================================================================
-//  components/ai-config/ToolsTab.tsx
-//  AIConfig sub-tab: Tool enable/disable toggles (persisted to localStorage)
-//
-//  NO hardcoded tool list — tools are passed as props fetched from
-//  GET /api/config/tools (backend ToolInvocationRegistry).
-// =============================================================================
+// Tool enable/disable toggles, persisted to localStorage. No hardcoded tool list —
+// tools are passed as props fetched from the backend registry.
 'use client';
 
 import { ToggleLeft, ToggleRight } from 'lucide-react';
@@ -34,7 +29,7 @@ export default function ToolsTab({ tools, toolsEnabled, onToggle }: Props) {
           const enabled = isEnabled(tool.id);
           return (
             <div key={tool.id} style={{
-              background: 'rgba(30,30,30,0.3)',
+              background: 'var(--bg-tertiary)',
               border: `1px solid ${enabled ? 'rgba(78,201,176,0.2)' : 'var(--border-color)'}`,
               borderRadius: '6px', padding: '12px',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px'

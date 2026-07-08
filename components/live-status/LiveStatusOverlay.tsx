@@ -1,63 +1,75 @@
-// =============================================================================
-//  components/live-status/LiveStatusOverlay.tsx
-//
-//  Production-grade Live Status Overlay — SNS IDE / Theia exact style.
-//
-//  Position: absolute, inset: 0 — covers the ai-panel__body area.
-//  The config panels (StackBadge, TargetConfig, etc.) remain mounted below.
-//
-//  Data: all props come from useLiveStatus() hook — real-time, SSE-driven.
-//  No internal state, no polling, no intervals.
-// =============================================================================
+// Live Status overlay — all props come from useLiveStatus(), real-time and SSE-driven.
+// No internal state, no polling.
 
 'use client';
 
-import { Loader2, AlertTriangle, AlertCircle, X, Activity } from 'lucide-react';
-import type { MigrationStatus } from '@/types';
+import { memo } from 'react';
+import { Loader2, AlertTriangle, AlertCircle, X, Activity, Check } from 'lucide-react';
+import type { MigrationStatus, MigrationPhase } from '@/types';
 import type { LiveStatusData } from './types';
+
+// Human-readable status for screen readers.
+const STEP_STATUS_LABEL: Record<MigrationPhase['status'], string> = {
+  done:    'completed',
+  active:  'in progress',
+  error:   'failed',
+  pending: 'pending',
+};
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
 const STATUS_TEXT: Record<MigrationStatus, string> = {
-  idle:               'Ready',
-  scanning:           'Scanning',
-  planning:           'Running',
-  discovery:          'Discovery',
-  'file-analysis':    'File Analysis',
-  'graph-resolution': 'Graph Resolution',
-  'section-writing':  'Writing Sections',
-  assembly:           'Assembly',
-  complete:           'Complete',
-  error:              'Error',
-  paused:             'Paused',
+  idle:                 'Ready',
+  scanning:             'Scanning',
+  planning:             'Running',
+  discovery:            'Discovery',
+  'file-analysis':      'File Analysis',
+  'graph-resolution':   'Graph Resolution',
+  'section-writing':    'Writing Sections',
+  assembly:             'Assembly',
+  'migration-planning': 'Migration Planning',
+  'code-generation':    'Code Generation',
+  verification:         'Verification',
+  'migration-assembly': 'Migration Report',
+  complete:             'Complete',
+  error:                'Error',
+  paused:               'Paused',
 };
 
 const DOT_CLASS: Record<MigrationStatus, string> = {
-  idle:               'ls-overlay__dot--idle',
-  scanning:           'ls-overlay__dot--scanning',
-  planning:           'ls-overlay__dot--running',
-  discovery:          'ls-overlay__dot--running',
-  'file-analysis':    'ls-overlay__dot--running',
-  'graph-resolution': 'ls-overlay__dot--running',
-  'section-writing':  'ls-overlay__dot--running',
-  assembly:           'ls-overlay__dot--running',
-  complete:           'ls-overlay__dot--complete',
-  error:              'ls-overlay__dot--error',
-  paused:             'ls-overlay__dot--paused',
+  idle:                 'ls-overlay__dot--idle',
+  scanning:             'ls-overlay__dot--scanning',
+  planning:             'ls-overlay__dot--running',
+  discovery:            'ls-overlay__dot--running',
+  'file-analysis':      'ls-overlay__dot--running',
+  'graph-resolution':   'ls-overlay__dot--running',
+  'section-writing':    'ls-overlay__dot--running',
+  assembly:             'ls-overlay__dot--running',
+  'migration-planning': 'ls-overlay__dot--running',
+  'code-generation':    'ls-overlay__dot--running',
+  verification:         'ls-overlay__dot--running',
+  'migration-assembly': 'ls-overlay__dot--running',
+  complete:             'ls-overlay__dot--complete',
+  error:                'ls-overlay__dot--error',
+  paused:               'ls-overlay__dot--paused',
 };
 
 const BADGE_CLASS: Record<MigrationStatus, string> = {
-  idle:               'ls-overlay__badge--idle',
-  scanning:           'ls-overlay__badge--scanning',
-  planning:           'ls-overlay__badge--running',
-  discovery:          'ls-overlay__badge--running',
-  'file-analysis':    'ls-overlay__badge--running',
-  'graph-resolution': 'ls-overlay__badge--running',
-  'section-writing':  'ls-overlay__badge--running',
-  assembly:           'ls-overlay__badge--running',
-  complete:           'ls-overlay__badge--complete',
-  error:              'ls-overlay__badge--error',
-  paused:             'ls-overlay__badge--paused',
+  idle:                 'ls-overlay__badge--idle',
+  scanning:             'ls-overlay__badge--scanning',
+  planning:             'ls-overlay__badge--running',
+  discovery:            'ls-overlay__badge--running',
+  'file-analysis':      'ls-overlay__badge--running',
+  'graph-resolution':   'ls-overlay__badge--running',
+  'section-writing':    'ls-overlay__badge--running',
+  assembly:             'ls-overlay__badge--running',
+  'migration-planning': 'ls-overlay__badge--running',
+  'code-generation':    'ls-overlay__badge--running',
+  verification:         'ls-overlay__badge--running',
+  'migration-assembly': 'ls-overlay__badge--running',
+  complete:             'ls-overlay__badge--complete',
+  error:                'ls-overlay__badge--error',
+  paused:               'ls-overlay__badge--paused',
 };
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -80,16 +92,53 @@ function Divider() {
   return <div className="ls-overlay__divider" />;
 }
 
+// Vertical pipeline stepper — reflects the SSE-driven phase statuses
+// (pending | active | done | error), giving an at-a-glance "where are we
+// in the migration" view rather than a single status word.
+//
+// Memoized: the live panel re-renders on every SSE tick (logs, tool calls),
+// but `phases` only changes on an actual stage transition — so the stepper
+// skips re-rendering on the far more frequent log updates.
+const StageStepper = memo(function StageStepper({ phases }: { phases: MigrationPhase[] }) {
+  return (
+    <div className="ls-overlay__stepper" role="list" aria-label="Migration pipeline stages">
+      {phases.map((p, i) => {
+        const isLast = i === phases.length - 1;
+        return (
+          <div
+            key={p.id}
+            className={`ls-overlay__step ls-overlay__step--${p.status}`}
+            role="listitem"
+            aria-label={`${p.label}: ${STEP_STATUS_LABEL[p.status]}`}
+          >
+            <div className="ls-overlay__step-rail" aria-hidden="true">
+              <span className="ls-overlay__step-icon">
+                {p.status === 'done'    && <Check size={13} />}
+                {p.status === 'active'  && <Loader2 size={12} className="spin" />}
+                {p.status === 'error'   && <AlertCircle size={12} />}
+                {p.status === 'pending' && <span className="ls-overlay__step-dot" />}
+              </span>
+              {!isLast && <span className="ls-overlay__step-line" />}
+            </div>
+            <span className="ls-overlay__step-label">{p.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 interface Props {
   data:      LiveStatusData;
   status:    MigrationStatus;
+  phases:    MigrationPhase[];
   isRunning: boolean;
   onClose:   () => void;
 }
 
-export default function LiveStatusOverlay({ data, status, isRunning, onClose }: Props) {
+export default function LiveStatusOverlay({ data, status, phases, isRunning, onClose }: Props) {
   const {
     realPct, fileCount, currentFile,
     activeTool, currentAgent, currentStage,
@@ -159,6 +208,17 @@ export default function LiveStatusOverlay({ data, status, isRunning, onClose }: 
 
       <Divider />
 
+      {/* ── Pipeline Stepper ────────────────────────────────────────────── */}
+      {phases.length > 0 && (
+        <>
+          <div className="ls-overlay__section">
+            <SectionTitle>Pipeline</SectionTitle>
+            <StageStepper phases={phases} />
+          </div>
+          <Divider />
+        </>
+      )}
+
       {/* ── Active Tool / Thinking ──────────────────────────────────────── */}
       {effectiveRunning && (
         <>
@@ -219,7 +279,7 @@ export default function LiveStatusOverlay({ data, status, isRunning, onClose }: 
                   className={`ls-overlay__feed-item ${item.success ? 'ls-overlay__feed-item--ok' : 'ls-overlay__feed-item--err'}`}
                 >
                   <span className="ls-overlay__feed-icon">
-                    {item.success ? '✓' : '✗'}
+                    {item.success ? <Check size={11} /> : <X size={11} />}
                   </span>
                   <span className="ls-overlay__feed-name" title={item.name}>
                     {item.name}

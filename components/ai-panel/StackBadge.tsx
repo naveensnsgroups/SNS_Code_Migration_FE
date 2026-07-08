@@ -1,8 +1,4 @@
-// =============================================================================
-//  components/ai-panel/StackBadge.tsx
-//  Displays the detected legacy tech stack with layer analysis.
-//  Shown in Section 1 of the Operational Panel.
-// =============================================================================
+// Displays the detected legacy tech stack with layer analysis.
 'use client';
 
 import { Cpu, Database } from 'lucide-react';
@@ -16,8 +12,8 @@ interface LayerRowProps {
 function LayerRow({ label, value }: LayerRowProps) {
   return (
     <div className="layer-item" style={{ fontSize: '11px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <span style={{ color: '#858585' }}>{label}</span>
-      <span style={{ fontWeight: 600, color: 'var(--text-color)' }}>{value || 'Not Detected'}</span>
+      <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
+      <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{value || 'Not Detected'}</span>
     </div>
   );
 }
@@ -58,9 +54,9 @@ export default function StackBadge({ detectedStack }: Props) {
         </div>
 
         {/* Layer Analysis */}
-        <div className="architectural-layers" style={{ marginTop: '14px', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '10px' }}>
-          <div style={{ fontSize: '9px', textTransform: 'uppercase', color: '#858585', marginBottom: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', letterSpacing: '0.5px' }}>
-            <Database size={10} style={{ color: '#007acc' }} />
+        <div className="architectural-layers" style={{ marginTop: '14px', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px' }}>
+          <div style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', letterSpacing: '0.5px' }}>
+            <Database size={10} style={{ color: 'var(--accent-blue)' }} />
             <span>Layer Analysis</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

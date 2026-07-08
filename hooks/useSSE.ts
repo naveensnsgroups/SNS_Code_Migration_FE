@@ -1,15 +1,5 @@
-// =============================================================================
-//  hooks/useSSE.ts
-//  Server-Sent Events lifecycle manager.
-//
-//  Handles: open, event dispatch, connection loss, cleanup on unmount.
-//  Extracted from handleStart() inline SSE code in page.tsx.
-//
-//  Usage:
-//    const { openSSE, closeSSE } = useSSE(onEvent, onError);
-//    // in handleStart: openSSE(`${backendUrl}/api/stream/${sessionId}`);
-//    // cleanup is automatic on unmount
-// =============================================================================
+// Server-Sent Events lifecycle manager — open, event dispatch, connection loss,
+// cleanup on unmount.
 
 import { useCallback, useEffect, useRef } from 'react';
 

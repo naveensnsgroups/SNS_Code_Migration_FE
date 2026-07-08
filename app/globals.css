@@ -19,8 +19,8 @@
   --accent-purple:   #c586c0;
 
   --text-primary:    #cccccc;
-  --text-secondary:  #858585;
-  --text-muted:      #6a6a6a;
+  --text-secondary:  #9d9d9d;
+  --text-muted:      #757575;
   --text-success:    #4ec9b0;
   --text-error:      #f48771;
   --text-warning:    #cca700;
@@ -29,6 +29,19 @@
 
   --border-color:    #3c3c3c;
   --border-subtle:   #2d2d2d;
+
+  /* Code syntax colors — VS Code "Dark+" token palette (dark_vs.json) */
+  --syntax-comment:  #6a9955;
+  --syntax-string:   #ce9178;
+  --syntax-keyword:  #569cd6;
+  --syntax-number:   #b5cea8;
+
+  /* Activity Bar / Title Bar foreground — pinned white regardless of theme.
+     Matches real VS Code: activityBar.background/foreground stay a fixed dark
+     surface + white text even under the Light theme, they don't follow
+     editor.foreground like the rest of the UI. */
+  --activity-fg:          #ffffff;
+  --activity-fg-inactive: rgba(255,255,255,0.65);
 
   --font-ui:         'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-mono:       'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
@@ -59,10 +72,27 @@
   --text-muted:      #969696;
   --text-white:      #ffffff;
 
+  /* Pastel "Dark+" accents are unreadable on a white canvas — swap in the
+     equivalent VS Code "Light+" accessible tones (same hue, darkened for contrast). */
+  --accent-green:    #098658;
+  --accent-orange:   #bc4c00;
+  --accent-yellow:   #8a6d00;
+  --accent-purple:   #8250df;
+  --text-success:    #098658;
+  --text-error:      #cf222e;
+  --text-warning:    #9a6700;
+  --text-info:       #005fb8;
+
   --border-color:    #d4d4d4;
   --border-subtle:   #ececec;
   --scrollbar-thumb: #cccccc;
   --scrollbar-thumb-hover: #aaaaaa;
+
+  /* Code syntax colors — VS Code "Light+" token palette (light_vs.json) */
+  --syntax-comment:  #008000;
+  --syntax-string:   #a31515;
+  --syntax-keyword:  #0000ff;
+  --syntax-number:   #098658;
 }
 
 /* ── High Contrast Override ──────────────────────────────────────── */
@@ -135,14 +165,14 @@ body {
   gap: 8px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--activity-fg);
 }
 .title-bar__logo-icon { color: var(--accent-blue); font-size: 16px; }
 .title-bar__actions { display: flex; align-items: center; gap: 6px; }
 .title-bar__btn {
   background: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: var(--activity-fg-inactive);
   padding: 2px 10px;
   font-size: 11px;
   border-radius: 3px;
@@ -150,7 +180,7 @@ body {
   font-family: var(--font-ui);
   transition: all 0.15s;
 }
-.title-bar__btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.title-bar__btn:hover { background: rgba(255,255,255,0.1); color: var(--activity-fg); }
 
 /* ── Main Work Area ────────────────────────────────────────────────────── */
 .work-area {
@@ -176,7 +206,7 @@ body {
   height: 40px;
   background: transparent;
   border: none;
-  color: var(--text-secondary);
+  color: var(--activity-fg-inactive);
   cursor: pointer;
   border-radius: 4px;
   display: flex;
@@ -185,9 +215,9 @@ body {
   transition: color 0.15s, background 0.15s;
   position: relative;
 }
-.activity-bar__btn:hover { color: var(--text-primary); }
+.activity-bar__btn:hover { color: var(--activity-fg); }
 .activity-bar__btn.active {
-  color: var(--text-primary);
+  color: var(--activity-fg);
   border-left: 2px solid var(--accent-blue);
 }
 .activity-bar__bottom { margin-top: auto; }
@@ -234,7 +264,7 @@ body {
   position: relative;
 }
 .file-tree__item:hover { background: var(--bg-hover); }
-.file-tree__item.selected { background: var(--bg-selected); }
+.file-tree__item.selected { background: var(--bg-selected); color: var(--text-white); }
 .file-tree__item-icon { flex-shrink: 0; font-size: 14px; display: flex; align-items: center; }
 .file-tree__item-name { overflow: hidden; text-overflow: ellipsis; font-size: 13px; margin-left: 1px; }
 
@@ -280,7 +310,7 @@ body {
 .default-file-icon::before {
   font-family: 'FontAwesome', sans-serif;
   content: '\f15b'; /* fa-file */
-  color: #858585;
+  color: var(--text-secondary);
   font-size: 13px;
   margin-right: 4px;
 }
@@ -374,7 +404,7 @@ body {
   text-align: center;
   cursor: pointer;
   transition: all 0.2s ease;
-  background: rgba(0, 0, 0, 0.08);
+  background: var(--bg-tertiary);
 }
 .theia-welcome-dropzone:hover {
   border-color: var(--accent-blue);
@@ -843,6 +873,69 @@ body {
   animation: progress-shimmer 1.6s ease-in-out infinite;
 }
 
+/* ── Pipeline Stepper (vertical timeline of migration phases) ─────────────── */
+.ls-overlay__stepper {
+  display: flex;
+  flex-direction: column;
+}
+.ls-overlay__step {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+/* Rail = the icon + the connector line beneath it, centered in a narrow column */
+.ls-overlay__step-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 16px;
+  flex-shrink: 0;
+}
+.ls-overlay__step-icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  z-index: 1;
+}
+.ls-overlay__step-line {
+  width: 1px;
+  flex: 1;
+  min-height: 8px;
+  background: var(--border-color);
+  margin: 1px 0;
+}
+/* A completed step's connector is green — draws the "path travelled" */
+.ls-overlay__step--done .ls-overlay__step-line {
+  background: var(--text-success);
+}
+.ls-overlay__step-label {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  line-height: 16px;
+  padding-bottom: 8px;
+  color: var(--text-muted);
+}
+/* Pending step: hollow dot */
+.ls-overlay__step-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-muted);
+  box-sizing: border-box;
+}
+.ls-overlay__step--done   .ls-overlay__step-icon { color: var(--text-success); }
+.ls-overlay__step--active .ls-overlay__step-icon { color: var(--accent-blue); }
+.ls-overlay__step--error  .ls-overlay__step-icon { color: var(--text-error); }
+.ls-overlay__step--done   .ls-overlay__step-label { color: var(--text-secondary); }
+.ls-overlay__step--active .ls-overlay__step-label {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.ls-overlay__step--error  .ls-overlay__step-label { color: var(--text-error); }
+
 /* Active Tool */
 .ls-overlay__tool {
   display: flex;
@@ -1067,7 +1160,19 @@ body {
 }
 .bottom-panel__tab.active { color: var(--text-primary); border-bottom-color: var(--accent-blue); }
 .bottom-panel__tab:hover { color: var(--text-primary); }
+/* The terminal is always a dark console, independent of the page theme (VS Code/Theia
+   behave the same way — terminal.background doesn't follow the workbench theme toggle).
+   Re-pin the shared text/border tokens here so nested rows (log-row, tool-call, phase-row,
+   thinking-row, turn-row, todo-row) stay legible instead of turning dark-on-dark in light mode. */
 .terminal {
+  --bg-primary:     #1e1e1e;
+  --text-primary:   #cccccc;
+  --text-secondary: #9d9d9d;
+  --text-muted:     #757575;
+  --text-white:     #ffffff;
+  --border-color:   #3c3c3c;
+  --border-subtle:  #2d2d2d;
+
   flex: 1;
   overflow-y: auto;
   padding: 8px 12px;
@@ -1075,6 +1180,7 @@ body {
   font-size: 12px;
   line-height: 1.6;
   background: #0d0d0d;
+  color: var(--text-primary);
 }
 .terminal__line { display: flex; gap: 8px; }
 .terminal__time { color: var(--text-muted); flex-shrink: 0; }
@@ -1372,6 +1478,14 @@ body {
 
 /* ── Status Bar ────────────────────────────────────────────────────────── */
 .status-bar {
+  /* Always solid blue regardless of theme — re-pin the status/accent tokens
+     used inside it so badges (cost, success/error states) stay legible on
+     blue instead of picking up light-theme colors tuned for a white canvas. */
+  --text-success: #4ec9b0;
+  --text-error:   #f48771;
+  --text-warning: #cca700;
+  --text-info:    #9cdcfe;
+
   height: var(--statusbar-height);
   background: var(--accent-blue);
   display: flex;
@@ -1423,7 +1537,7 @@ body {
 
 /* Stack Badge Premium */
 .stack-badge-premium {
-  background: linear-gradient(135deg, rgba(37,37,38,0.7) 0%, rgba(45,45,45,0.7) 100%);
+  background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 10px;
@@ -1437,10 +1551,10 @@ body {
 .badge-pill {
   display: flex;
   flex-direction: column;
-  background: rgba(30,30,30,0.6);
+  background: var(--bg-primary);
   padding: 6px 8px;
   border-radius: 4px;
-  border: 1px solid rgba(255,255,255,0.03);
+  border: 1px solid var(--border-subtle);
 }
 .badge-pill__label {
   font-size: 9px;
@@ -1474,7 +1588,7 @@ body {
   font-size: 11px;
   text-align: center;
   gap: 8px;
-  background: rgba(0,0,0,0.1);
+  background: var(--bg-tertiary);
 }
 
 /* Custom Select & Form controls */
@@ -1648,7 +1762,7 @@ body {
   padding: 6px 8px;
   border-radius: 4px;
   font-size: 12px;
-  background: rgba(30,30,30,0.3);
+  background: var(--bg-tertiary);
   border: 1px solid transparent;
   transition: all 0.2s ease;
 }
@@ -1998,7 +2112,7 @@ body {
 .settings-list-items {
   display: flex;
   flex-direction: column;
-  background: rgba(0,0,0,0.1);
+  background: var(--bg-tertiary);
 }
 .settings-list-item-row {
   display: flex;
@@ -2239,7 +2353,7 @@ body {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   overflow: hidden;
-  background: rgba(0,0,0,0.1);
+  background: var(--bg-tertiary);
 }
 .ai-config-table th {
   background: var(--bg-secondary);

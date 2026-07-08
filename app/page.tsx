@@ -19,17 +19,21 @@ import type { MigrationStatus } from '@/types';
 // ── Status Label Map ───────────────────────────────────────────────────────────
 
 const STATUS_LABEL: Record<MigrationStatus, string> = {
-  idle:               'Ready',
-  scanning:           'Scanning...',
-  planning:           'Planning...',
-  discovery:          'Discovery...',
-  'file-analysis':    'File Analysis...',
-  'graph-resolution': 'Graph Resolution...',
-  'section-writing':  'Writing Sections...',
-  assembly:           'Assembly...',
-  complete:           'Complete ✅',
-  error:              'Error ❌',
-  paused:             'Paused ⏸',
+  idle:                 'Ready',
+  scanning:             'Scanning...',
+  planning:             'Planning...',
+  discovery:            'Discovery...',
+  'file-analysis':      'File Analysis...',
+  'graph-resolution':   'Graph Resolution...',
+  'section-writing':    'Writing Sections...',
+  assembly:             'Assembly...',
+  'migration-planning': 'Planning Migration...',
+  'code-generation':    'Generating Code...',
+  verification:         'Verifying...',
+  'migration-assembly': 'Migration Report...',
+  complete:             'Complete',
+  error:                'Error',
+  paused:               'Paused',
 };
 
 // ── Page ───────────────────────────────────────────────────────────────────────
@@ -62,7 +66,10 @@ export default function HomePage() {
     modernFileTree, modernFolderBasename,
     tokenUsage, isRunning, hasProject,
     activeTool, toolCallHistory,
-    handleUpload, handleStart, handleStop, handlePause, handleSelectFile, clearSelectedFile,
+    migrationTaskList, ruleCoverageReport, isPlanning, isGenerating, isVerifying,
+    handleUpload, handleStart, handleStartMigrationPlanning, handleStartCodeGeneration,
+    handleStartVerification,
+    handleStop, handlePause, handleSelectFile, clearSelectedFile,
     handleDownload,
   } = useMigration(backendUrl, notify);
 
@@ -124,7 +131,7 @@ export default function HomePage() {
         </div>
         <div className="title-bar__actions">
           {sessionId && (
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+            <span style={{ fontSize: 11, color: 'var(--activity-fg-inactive)', fontFamily: 'var(--font-mono)' }}>
               Session: {sessionId}
             </span>
           )}
@@ -201,7 +208,6 @@ export default function HomePage() {
             settingsTrigger={settingsTrigger}
             tokenUsage={tokenUsage ?? undefined}
             backendUrl={backendUrl}
-            isRunning={isRunning}
             sessionId={sessionId}
           />
         ) : (
@@ -235,6 +241,14 @@ export default function HomePage() {
               settingsTrigger={settingsTrigger}
               onSettingsSaved={handleSettingsSaved}
               width={aiPanelWidth}
+              migrationTaskList={migrationTaskList}
+              ruleCoverageReport={ruleCoverageReport}
+              isPlanning={isPlanning}
+              onStartMigration={handleStartMigrationPlanning}
+              isGenerating={isGenerating}
+              onStartGeneration={handleStartCodeGeneration}
+              isVerifying={isVerifying}
+              onStartVerification={handleStartVerification}
             />
           </>
         )}

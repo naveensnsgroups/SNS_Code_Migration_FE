@@ -1,11 +1,5 @@
-// =============================================================================
-//  components/ai-panel/TargetConfig.tsx
-//  Target stack inputs — user types their own target framework, database,
-//  language, and test framework. NO hardcoded option arrays.
-//
-//  User input is persisted to localStorage on every keystroke and sent
-//  to the backend as part of the TargetStack payload on Start.
-// =============================================================================
+// Target stack inputs — free-text, no hardcoded option arrays. Persisted to
+// localStorage on every keystroke, sent to the backend on Start.
 'use client';
 
 import { Terminal } from 'lucide-react';

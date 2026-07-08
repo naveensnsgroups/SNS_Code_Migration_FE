@@ -1,15 +1,6 @@
-// =============================================================================
-//  services/api.ts
-//  Central API communication layer for Code Migration Platform.
-//
-//  Rules:
-//   - NO hardcoded URLs — backendUrl is always a parameter
-//   - NO business logic — pure fetch wrappers
-//   - All responses are typed
-//   - All errors throw with a meaningful message
-// =============================================================================
+// Central API communication layer — pure typed fetch wrappers, no business logic, no hardcoded URLs.
 
-import type { DetectedStack, FileNode, TargetStack } from '@/types';
+import type { DetectedStack, FileNode, TargetStack, MigrationTaskEntry, RuleCoverageEntry } from '@/types';
 
 // ── Response Types ────────────────────────────────────────────────────────────
 
@@ -80,10 +71,6 @@ export interface MigrateStartPayload {
 
 // ── API Functions ─────────────────────────────────────────────────────────────
 
-/**
- * Upload project files and trigger a scan.
- * POST /api/scan
- */
 export async function scanProject(
   backendUrl: string,
   formData: FormData
@@ -96,10 +83,6 @@ export async function scanProject(
   return res.json() as Promise<ScanResponse>;
 }
 
-/**
- * Start the migration pipeline for a session.
- * POST /api/migrate/start
- */
 export async function startMigration(
   backendUrl: string,
   payload: MigrateStartPayload
@@ -112,10 +95,55 @@ export async function startMigration(
   if (!res.ok) throw new Error(await res.text());
 }
 
-/**
- * Stop the running migration for a session.
- * POST /api/migrate/stop
- */
+// Requires the analysis pipeline to have already completed; apiKey/apiKeys must be
+// resent since it wipes them from the session on completion.
+export async function startMigrationPlanning(
+  backendUrl: string,
+  sessionId: string,
+  targetStack: TargetStack,
+  apiKey: string,
+  apiKeys: Record<string, string>
+): Promise<void> {
+  const res = await fetch(`${backendUrl}/api/migrate/plan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, targetStack, apiKey, apiKeys }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+// Requires a migration task list from /plan to already exist.
+export async function startCodeGeneration(
+  backendUrl: string,
+  sessionId: string,
+  targetStack: TargetStack,
+  apiKey: string,
+  apiKeys: Record<string, string>
+): Promise<void> {
+  const res = await fetch(`${backendUrl}/api/migrate/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, targetStack, apiKey, apiKeys }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+// Requires at least one 'generated' task from /generate.
+export async function startVerification(
+  backendUrl: string,
+  sessionId: string,
+  targetStack: TargetStack,
+  apiKey: string,
+  apiKeys: Record<string, string>
+): Promise<void> {
+  const res = await fetch(`${backendUrl}/api/migrate/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, targetStack, apiKey, apiKeys }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
 export async function stopMigration(
   backendUrl: string,
   sessionId: string
@@ -128,10 +156,6 @@ export async function stopMigration(
   if (!res.ok) throw new Error(await res.text());
 }
 
-/**
- * Pause the running migration for a session.
- * POST /api/migrate/pause
- */
 export async function pauseMigration(
   backendUrl: string,
   sessionId: string
@@ -144,10 +168,6 @@ export async function pauseMigration(
   if (!res.ok) throw new Error(await res.text());
 }
 
-/**
- * Load legacy and modern content for a selected file.
- * GET /api/file
- */
 export async function fetchFileContent(
   backendUrl: string,
   sessionId: string,
@@ -160,10 +180,6 @@ export async function fetchFileContent(
   return res.json() as Promise<FileContentResponse>;
 }
 
-/**
- * Fetch the modern output file tree for a session.
- * GET /api/migrate/tree
- */
 export async function fetchModernTree(
   backendUrl: string,
   sessionId: string
@@ -184,13 +200,11 @@ export interface SessionStateResponse {
   phases: { id: string; label: string; status: 'pending' | 'active' | 'done' | 'error' }[];
   progress: number;
   currentFile: string;
+  migrationTaskList: MigrationTaskEntry[] | null;
+  ruleCoverageReport: RuleCoverageEntry[] | null;
 }
 
-/**
- * Full restorable session state — used on page load to recover an in-progress
- * or completed session after a refresh, instead of only remembering the
- * sessionId and losing everything else.
- */
+// Used on page load to recover an in-progress or completed session after a refresh.
 export async function fetchSessionState(
   backendUrl: string,
   sessionId: string
@@ -250,36 +264,19 @@ export interface ToolsResponse {
   timestamp: string;
 }
 
-/**
- * Fetch all registered agent definitions from the backend.
- * GET /api/config/agents
- */
 export async function fetchAgents(backendUrl: string): Promise<AgentsResponse> {
   const res = await fetch(`${backendUrl}/api/config/agents`);
   if (!res.ok) throw new Error('Failed to load agent definitions');
   return res.json() as Promise<AgentsResponse>;
 }
 
-/**
- * Fetch all registered tools from the backend tool registry.
- * GET /api/config/tools
- */
 export async function fetchTools(backendUrl: string): Promise<ToolsResponse> {
   const res = await fetch(`${backendUrl}/api/config/tools`);
   if (!res.ok) throw new Error('Failed to load tool registry');
   return res.json() as Promise<ToolsResponse>;
 }
 
-/**
- * Fetch persisted token usage from session.json for a session.
- * GET /api/migrate/tokens?sessionId=...\n * Used to hydrate the Token Usage tab on load/page refresh.
- */
-/**
- * Update the user-supplied per-model pricing rate(s) for a session. Applies
- * retroactively — the backend recomputes cost fresh from this on every
- * /tokens read, so this doesn't require restarting the migration.
- * POST /api/migrate/pricing
- */
+// Applies retroactively — the backend recomputes cost fresh from this on every /tokens read.
 export async function updateModelPricing(
   backendUrl: string,
   sessionId: string,
@@ -304,10 +301,6 @@ export async function fetchSessionTokens(
   return res.json() as Promise<SessionTokensResponse>;
 }
 
-/**
- * Trigger browser download of a file from the modern workspace.
- * GET /api/file/download?sessionId=...&file=Stage1_Analysis.md
- */
 export function downloadFile(backendUrl: string, sessionId: string, fileName: string): void {
   const url = `${backendUrl}/api/file/download?sessionId=${encodeURIComponent(sessionId)}&file=${encodeURIComponent(fileName)}`;
   const a = document.createElement('a');
@@ -316,14 +309,4 @@ export function downloadFile(backendUrl: string, sessionId: string, fileName: st
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
-}
-
-/**
- * Fetch list of all sessions from the backend.
- * GET /api/config/sessions
- */
-export async function fetchSessionList(backendUrl: string): Promise<{ sessions: { sessionId: string; status: string; startedAt?: string }[] }> {
-  const res = await fetch(`${backendUrl}/api/config/sessions`);
-  if (!res.ok) return { sessions: [] };
-  return res.json();
 }

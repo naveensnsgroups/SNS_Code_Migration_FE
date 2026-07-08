@@ -1,17 +1,10 @@
-// =============================================================================
-//  components/ai-config/AgentsTab.tsx
-//  AIConfig sub-tab: Agent list (sidebar) + scrollable detail panel
-//
-//  - Detail pane scrolls independently (overflow-y: auto)
-//  - LLM binding shows the backend alias identifier (alias:fast-model) — not
-//    a raw model name — and lets user override via free-text input
-//  - Variables table and Functions list fully visible with scroll
-// =============================================================================
+// Agent list (sidebar) + scrollable detail panel. LLM binding shows the backend
+// alias identifier (alias:fast-model), not a raw model name.
 'use client';
 
 import { Settings, Layers, Terminal, Cpu, ToggleLeft, ToggleRight, ExternalLink } from 'lucide-react';
 
-export interface AgentConfig {
+interface AgentConfig {
   id: string;
   name: string;
   enabled: boolean;
@@ -147,7 +140,7 @@ export default function AgentsTab({ agents, selectedAgentId, modelOptions, onSel
           <div className="form-group" style={{ maxWidth: '420px' }}>
             <label className="form-label">Language Model Binding</label>
             <div style={{
-              background: 'rgba(30,30,30,0.5)', border: '1px solid var(--border-color)',
+              background: 'var(--bg-primary)', border: '1px solid var(--border-color)',
               borderRadius: '4px', padding: '8px 10px', marginBottom: '6px'
             }}>
               <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px' }}>Backend alias (from agent-definitions.ts):</div>
@@ -200,7 +193,7 @@ export default function AgentsTab({ agents, selectedAgentId, modelOptions, onSel
               {selectedAgent.functions.map((fn, i) => (
                 <span key={i} style={{
                   fontSize: '11px', padding: '3px 8px', borderRadius: '4px',
-                  background: 'rgba(30,30,30,0.6)', border: '1px solid var(--border-color)',
+                  background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)',
                   fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)',
                 }}>
                   {fn}

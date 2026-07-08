@@ -1,20 +1,4 @@
-// =============================================================================
-//  components/notifications/NotificationCenter.tsx
-//
-//  SNS IDE faithful — mirrors:
-//    packages/messages/src/browser/notification-center-component.tsx
-//    packages/messages/src/browser/notifications-contribution.ts (bell)
-//
-//  NotificationCenter panel:
-//    - open when visibilityState === 'center'
-//    - header: "Notifications (N new)" + "Mark all read" + "Clear all" + "×"
-//    - scrollable list of all history entries
-//
-//  NotificationBell (status bar element):
-//    - codicon-bell / codicon-bell-dot  (SNS IDE: $(codicon-bell-dot) N)
-//    - badge count
-//    - click → toggleCenter() + markAllRead()
-// =============================================================================
+// NotificationCenter panel (full history list) + NotificationBell (status bar badge).
 'use client';
 
 import { useNotifications, NotificationEntry, NotificationType } from '@/context/NotificationContext';
@@ -144,8 +128,6 @@ function NotifItem({ entry }: { entry: NotificationEntry }) {
 }
 
 // ── Notification Center Panel ──────────────────────────────────────────────────
-// Mirrors notification-center-component.tsx
-// .theia-notification-center { position: fixed; bottom: 30px; right: 0; width: 500px }
 
 export function NotificationCenterPanel() {
   const { history, unreadCount, closeCenter, markAllRead, clearAll } = useNotifications();
@@ -198,7 +180,7 @@ export function NotificationCenterPanel() {
         <div className="theia-notification-list">
           {isEmpty ? (
             <div className="theia-notification-center-empty">
-              <span className="theia-notification-center-empty-icon">🔔</span>
+              <span className="theia-notification-center-empty-icon"><BellIcon /></span>
               <span>No notifications</span>
             </div>
           ) : (
@@ -213,8 +195,6 @@ export function NotificationCenterPanel() {
 }
 
 // ── Bell Icon Button (for Status Bar) ─────────────────────────────────────────
-// SNS IDE: status bar element with $(codicon-bell-dot) N or $(codicon-bell)
-// Right-aligned, priority: -900, click → toggleCenter()
 
 export function NotificationBell() {
   const { unreadCount, centerOpen, toggleCenter, markAllRead } = useNotifications();

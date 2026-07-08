@@ -1,19 +1,9 @@
-// =============================================================================
-//  components/ai-config/SkillsTab.tsx
-//
-//  Skills tab — fetches REAL skill files from GET /api/config/skills.
-//  Backend reads the /skills directory and parses SKILL.md YAML frontmatter.
-//  No mock data. No hardcoded skill IDs.
-//
-//  SNS IDE concept:
-//    Skills = reusable instruction files in .prompts/skills/<name>/SKILL.md
-//    Each SKILL.md has YAML frontmatter (name, description) + markdown content.
-//    Agents call getSkillFileContent(skillPath) to inject them into prompts.
-// =============================================================================
+// Fetches real skill files from GET /api/config/skills — backend reads the /skills
+// directory and parses SKILL.md YAML frontmatter. No mock data, no hardcoded IDs.
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Award, RefreshCw, FileText, Eye, EyeOff } from 'lucide-react';
+import { Award, RefreshCw, FileText, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 interface SkillFile {
   id:          string;
@@ -24,10 +14,10 @@ interface SkillFile {
 }
 
 interface Props {
-  backendUrl?: string;
+  backendUrl: string;
 }
 
-export default function SkillsTab({ backendUrl = 'http://localhost:4000' }: Props) {
+export default function SkillsTab({ backendUrl }: Props) {
   const [skills,    setSkills]    = useState<SkillFile[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState<string | null>(null);
@@ -121,7 +111,7 @@ export default function SkillsTab({ backendUrl = 'http://localhost:4000' }: Prop
         </div>
       ) : error ? (
         <div style={{ background: 'rgba(244,135,113,0.08)', border: '1px solid rgba(244,135,113,0.3)', borderRadius: '6px', padding: '12px', fontSize: '12px', color: 'var(--text-error)' }}>
-          ⚠ Could not load skills: {error}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><AlertCircle size={13} /> Could not load skills: {error}</span>
           <br />
           <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
             Ensure the backend is running and <code style={{ fontFamily: 'var(--font-mono)' }}>skills/</code> directory exists.
@@ -142,7 +132,7 @@ export default function SkillsTab({ backendUrl = 'http://localhost:4000' }: Prop
             <div
               key={skill.id}
               style={{
-                background: 'rgba(30,30,30,0.35)',
+                background: 'var(--bg-tertiary)',
                 border: `1px solid ${previewId === skill.id ? 'rgba(0,122,204,0.4)' : 'var(--border-color)'}`,
                 borderRadius: '6px', overflow: 'hidden',
                 transition: 'border-color 0.2s',
@@ -190,7 +180,7 @@ export default function SkillsTab({ backendUrl = 'http://localhost:4000' }: Prop
 
               {/* Expandable preview pane */}
               {previewId === skill.id && (
-                <div style={{ borderTop: '1px solid var(--border-subtle)', background: 'rgba(0,0,0,0.2)' }}>
+                <div style={{ borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-primary)' }}>
                   {previewLoading ? (
                     <div style={{ padding: '12px', fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center' }}>
                       Loading…

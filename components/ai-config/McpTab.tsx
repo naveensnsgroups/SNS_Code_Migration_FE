@@ -1,8 +1,4 @@
-// =============================================================================
-//  components/ai-config/McpTab.tsx
-//  MCP Servers tab — shows live status, tools per server, connect/disconnect.
-//  Data comes from GET /api/mcp/status (real backend detection).
-// =============================================================================
+// MCP Servers tab — live status and tools per server, from real backend detection.
 'use client';
 
 import { useState } from 'react';
@@ -29,7 +25,7 @@ function ServerRow({ server }: { server: MCPServer }) {
 
   return (
     <div style={{
-      background: 'rgba(30,30,30,0.4)',
+      background: 'var(--bg-tertiary)',
       border: `1px solid ${isConnected ? 'rgba(78,201,176,0.25)' : 'var(--border-color)'}`,
       borderRadius: '6px', overflow: 'hidden'
     }}>
@@ -76,7 +72,7 @@ function ServerRow({ server }: { server: MCPServer }) {
 
       {/* Expanded tools list */}
       {expanded && (
-        <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '10px 12px', background: 'rgba(0,0,0,0.15)' }}>
+        <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '10px 12px', background: 'var(--bg-primary)' }}>
           {server.version && (
             <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '8px', fontFamily: 'var(--font-mono)' }}>
               Version: {server.version}
@@ -92,7 +88,7 @@ function ServerRow({ server }: { server: MCPServer }) {
                 {server.tools.map(tool => (
                   <span key={tool} style={{
                     fontSize: '10px', padding: '2px 7px', borderRadius: '3px',
-                    background: 'rgba(30,30,30,0.6)', border: '1px solid var(--border-color)',
+                    background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)',
                     fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)'
                   }}>
                     {tool}

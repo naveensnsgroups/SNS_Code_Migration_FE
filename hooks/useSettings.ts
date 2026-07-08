@@ -1,17 +1,9 @@
-// =============================================================================
-//  hooks/useSettings.ts
-//  Reads all user settings from localStorage in a single place.
-//
-//  Replaces duplicated localStorage reading in page.tsx (handleUpload, handleStart).
-//
-//  Usage:
-//    const { backendUrl, provider, model, apiKey, allApiKeys } = useSettings();
-// =============================================================================
+// Reads all user settings from localStorage in a single place.
 
 import { useEffect, useState } from 'react';
 import type { AIProvider } from '@/types';
 
-const DEFAULT_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:4000';
+export const DEFAULT_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:4000';
 
 
 // ── Helper ────────────────────────────────────────────────────────────────────
@@ -48,9 +40,7 @@ export interface AppSettings {
   toolsConfig: Record<string, boolean>;
   aliasesConfig: Record<string, string>;
   promptFragments: Record<string, string>;
-  /** User-supplied per-model $/1M-token rates. Empty unless the user configured
-   *  one — never a hardcoded default. See TokensTab.tsx for the editor UI and
-   *  the backend's agent-cost-estimator.ts for why this isn't a static table. */
+  /** User-supplied per-model $/1M-token rates — empty unless configured, never a hardcoded default. */
   modelPricing: Record<string, { inputPerM: number; outputPerM: number; cacheWritePerM?: number; cacheReadPerM?: number }>;
 }
 
@@ -75,9 +65,7 @@ export function useSettings(settingsTrigger = 0): AppSettings {
  * Call this inside an effect or callback when you need fresh values.
  */
 export function readSettings(): AppSettings {
-  // Provider and model come ONLY from user Settings — no hardcoded fallbacks.
-  // If not configured, empty string is returned; ActionButtons will block Start
-  // and show a clear message telling the user to configure Settings first.
+  // No hardcoded fallback — empty means unconfigured, and ActionButtons blocks Start on that.
   const provider = readStoredString('setting_selected_provider', 'google') as AIProvider;
   const model    = readStoredString(`setting_${provider}_selected_model`, '');
   const apiKey   = readStoredString(`setting_${provider}_api_key`, '');

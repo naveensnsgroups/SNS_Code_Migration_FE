@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronRight, FolderOpen } from 'lucide-react';
+import { ChevronRight, FolderOpen, Check, Loader2 } from 'lucide-react';
 import { getFileIcon, getFolderIcon } from '../utils/labelProvider';
 import type { FileNode } from '@/types';
 
@@ -67,7 +67,7 @@ function FileItem({
         <span className="file-tree__item-icon">{icon}</span>
         <span className="file-tree__item-name">{node.name}</span>
         {node.migrated && (
-          <span style={{ marginLeft: 'auto', color: 'var(--text-success)', fontSize: 10 }}>✓</span>
+          <span style={{ marginLeft: 'auto', color: 'var(--text-success)', display: 'flex' }}><Check size={10} /></span>
         )}
       </div>
       {node.type === 'directory' && open && node.children?.map((child) => (
@@ -78,6 +78,8 @@ function FileItem({
 }
 
 export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, onUpload, hasProject, width, modernFileTree = [], modernFolderBasename }: Props) {
+  const [isUploading, setIsUploading] = useState(false);
+
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     const items = e.dataTransfer.items;
@@ -137,7 +139,12 @@ export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, on
     const files = flatFiles.map(f => f.file);
     const paths = flatFiles.map(f => f.path);
 
-    onUpload(files, paths);
+    setIsUploading(true);
+    try {
+      await onUpload(files, paths);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -146,31 +153,51 @@ export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, on
       <div className="sidebar__content">
         {!hasProject ? (
           <div className="theia-welcome-view">
-            <FolderOpen size={28} className="theia-welcome-icon" style={{ color: '#858585' }} />
-            <p className="theia-welcome-text">You have not yet opened a legacy project folder.</p>
-            <button
-              className="btn-premium btn-premium--primary theia-welcome-btn"
-              onClick={() => {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.webkitdirectory = true;
-                input.multiple = true;
-                input.onchange = (e) => {
-                  const files = (e.target as HTMLInputElement).files;
-                  if (files) onUpload(files);
-                };
-                input.click();
-              }}
-            >
-              Open Folder
-            </button>
-            <div
-              className="theia-welcome-dropzone"
-              onDrop={handleDrop}
-              onDragOver={(e) => e.preventDefault()}
-            >
-              or drag &amp; drop project folder here
-            </div>
+            {isUploading ? (
+              <>
+                <Loader2 size={28} className="spin" style={{ color: 'var(--accent-blue)' }} />
+                <p className="theia-welcome-text">Reading and uploading project files…</p>
+              </>
+            ) : (
+              <>
+                <FolderOpen size={28} className="theia-welcome-icon" style={{ color: 'var(--text-secondary)' }} />
+                <p className="theia-welcome-text">You have not yet opened a legacy project folder.</p>
+                <button
+                  className="btn-premium btn-premium--primary theia-welcome-btn"
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.webkitdirectory = true;
+                    input.multiple = true;
+                    input.onchange = async (e) => {
+                      const files = (e.target as HTMLInputElement).files;
+                      if (!files) return;
+                      setIsUploading(true);
+                      try {
+                        await onUpload(files);
+                      } finally {
+                        setIsUploading(false);
+                      }
+                    };
+                    input.click();
+                  }}
+                >
+                  Open Folder
+                </button>
+                <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px', maxWidth: '200px' }}>
+                  Your browser will ask you to confirm folder access — click Upload to continue.
+                </p>
+              </>
+            )}
+            {!isUploading && (
+              <div
+                className="theia-welcome-dropzone"
+                onDrop={handleDrop}
+                onDragOver={(e) => e.preventDefault()}
+              >
+                or drag &amp; drop project folder here
+              </div>
+            )}
           </div>
         ) : (
           <div className="file-tree">

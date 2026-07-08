@@ -1,26 +1,7 @@
-// =============================================================================
-//  components/notifications/NotificationToasts.tsx
-//
-//  SNS IDE faithful — mirrors:
-//    packages/messages/src/browser/notification-toasts-component.tsx
-//    packages/messages/src/browser/notification-component.tsx
-//
-//  Layout (exactly SNS IDE):
-//    ┌──────────────────────────────────────────┐
-//    │ [icon]  message text               [×]   │
-//    │ ▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒  ← timer│
-//    └──────────────────────────────────────────┘
-//  - Bottom-right, above status bar (bottom: 30px, right: 16px)
-//  - Width: 500px (SNS IDE: width: 500px)
-//  - Max 3 toasts (SNS IDE: toasts.slice(-3))
-//  - Each toast has box-shadow + border like SNS IDE .theia-notification-list-item
-// =============================================================================
+// Bottom-right toast stack, above the status bar, max 3 visible with auto-dismiss timer.
 'use client';
 
 import { useNotifications, NotificationEntry, NotificationType } from '@/context/NotificationContext';
-
-// ── Codicon-style SVG icons (matches SNS IDE's codicon icon set) ──────────────
-// SNS IDE: codicon('info'), codicon('warning'), codicon('error'), codicon('close')
 
 function SvgIcon({ type }: { type: NotificationType }) {
   if (type === 'error') return (
@@ -113,8 +94,6 @@ function ToastItem({ entry }: { entry: NotificationEntry }) {
 }
 
 // ── Toast Container ───────────────────────────────────────────────────────────
-// SNS IDE: .theia-notifications-container.theia-notification-toasts
-// open when visibilityState === 'toasts'
 
 export default function NotificationToasts() {
   const { toasts, visibilityState } = useNotifications();

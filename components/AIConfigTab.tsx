@@ -1,19 +1,8 @@
-// =============================================================================
-//  components/AIConfigTab.tsx
-//
-//  Orchestrator for the AI Configuration panel.
-//  All agent and tool data is fetched from the backend at runtime — NO hardcoded
-//  mock data. Sub-tab panels are independent, focused components.
-//
-//  Real data endpoints:
-//   GET /api/config/agents  → AgentsTab
-//   GET /api/config/tools   → ToolsTab
-//   GET /api/mcp/status     → McpTab
-// =============================================================================
+// Orchestrator for the AI Configuration panel — all agent/tool data is fetched from the backend at runtime.
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Layers, Coins, Bookmark, Wrench, Award, Link, Database, Bot } from 'lucide-react';
+import { Users, Layers, Coins, Bookmark, Wrench, Award, Link, Database, Bot, AlertCircle, X } from 'lucide-react';
 import { fetchAgents, fetchTools, type AgentDto, type ToolDto } from '@/services/api';
 import { getAllDefaultModelOptions, getDefaultAliases } from '@/constants/models';
 import type { TokenUsage } from '@/hooks/useMigration';
@@ -62,8 +51,7 @@ interface Props {
   onSettingsSaved?: () => void;
   settingsTrigger?: number;
   tokenUsage?: TokenUsage;
-  backendUrl?: string;
-  isRunning?: boolean;
+  backendUrl: string;
   sessionId?: string | null;
 }
 
@@ -74,8 +62,7 @@ export default function AIConfigTab({
   onSettingsSaved,
   settingsTrigger = 0,
   tokenUsage,
-  backendUrl = 'http://localhost:4000',
-  isRunning = false,
+  backendUrl,
   sessionId,
 }: Props) {
   const [activeSubTab,     setActiveSubTab]     = useState<SubTab>('agents');
@@ -222,7 +209,7 @@ export default function AIConfigTab({
           <Bot size={15} style={{ color: 'var(--accent-blue)' }} />
           <span className="settings-title">AI Configuration</span>
           {onClose && (
-            <button className="settings-close" onClick={onClose} title="Close Panel">✕</button>
+            <button className="settings-close" onClick={onClose} title="Close Panel"><X size={13} /></button>
           )}
         </div>
       </div>
@@ -248,7 +235,7 @@ export default function AIConfigTab({
           agentsLoading ? (
             <div style={{ padding: '24px', fontSize: '13px', color: 'var(--text-muted)' }}>Loading agents from backend…</div>
           ) : agentsError ? (
-            <div style={{ padding: '24px', fontSize: '13px', color: 'var(--text-error)' }}>⚠ {agentsError}</div>
+            <div style={{ padding: '24px', fontSize: '13px', color: 'var(--text-error)', display: 'flex', alignItems: 'center', gap: '6px' }}><AlertCircle size={14} /> {agentsError}</div>
           ) : (
             <AgentsTab
               agents={mergedAgents}
@@ -263,7 +250,7 @@ export default function AIConfigTab({
 
         {activeSubTab === 'variables'  && <VariablesTab />}
         {activeSubTab === 'mcp'        && <McpTab servers={mcpServers} loading={mcpLoading} onRefresh={refreshMcp} />}
-        {activeSubTab === 'tokens'     && <TokensTab tokenUsage={tokenUsage} isRunning={isRunning} sessionId={sessionId} />}
+        {activeSubTab === 'tokens'     && <TokensTab tokenUsage={tokenUsage} sessionId={sessionId} backendUrl={backendUrl} />}
         {activeSubTab === 'fragments'  && <FragmentsTab />}
 
         {activeSubTab === 'tools' && (

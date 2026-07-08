@@ -1,17 +1,8 @@
-// =============================================================================
-//  components/ai-panel/ActionButtons.tsx
-//  Start / Pause / Stop / Resume action buttons for the pipeline.
-//
-//  Button enable logic:
-//    Stage-1 "Start Analysis"  → enabled when hasProject && hasApiKey
-//                                (does NOT need detectedStack — this IS the scan)
-//    Stage-2 "Start Migration" → enabled when detectedStack && hasApiKey
-//    Pause / Stop              → shown only while running
-//    Resume                    → shown only when paused
-// =============================================================================
+// Start / Pause / Stop / Resume buttons. "Start Analysis" doesn't need detectedStack —
+// that's the scan itself; "Start Migration" does.
 'use client';
 
-import { Play, Pause, Square, CheckCircle2 } from 'lucide-react';
+import { Play, Pause, Square, CheckCircle2, AlertTriangle } from 'lucide-react';
 import type { MigrationStatus, DetectedStack } from '@/types';
 import { useNotifications } from '@/context/NotificationContext';
 
@@ -25,15 +16,33 @@ interface Props {
   onStart:  () => void;
   onStop:   () => void;
   onPause:  () => void;
+  /** Stage 2 — enabled once Stage 1 is complete and the 4 target fields are filled in. */
+  canStartMigration?:   boolean;
+  migrationDisabledReason?: string;
+  isPlanning?:          boolean;
+  migrationPlanningDone?: boolean;
+  onStartMigration?:    () => void;
+  /** Stage 2 — Code Generation, enabled once a migration plan has been reviewed. */
+  isGenerating?:         boolean;
+  codeGenerationDone?:   boolean;
+  generatedCount?:       number;
+  failedCount?:          number;
+  onStartGeneration?:    () => void;
+  /** Stage 2 — Verification, enabled once at least one file has been generated. */
+  isVerifying?:          boolean;
+  verificationDone?:     boolean;
+  verifiedCount?:        number;
+  verificationFailedCount?: number;
+  onStartVerification?:  () => void;
 }
 
-// Note: `detectedStack` and `planPhaseDone` are received but not yet used —
-// reserved for the Stage-2 "Start Migration" button (see comment above),
-// which isn't built yet. Not destructured below to avoid an unused-var
-// warning; they remain valid Props for when that button is implemented.
 export default function ActionButtons({
-  status, hasApiKey, hasModel, hasProject,
+  status, hasApiKey, hasModel, hasProject, detectedStack, planPhaseDone,
   onStart, onStop, onPause,
+  canStartMigration, migrationDisabledReason, isPlanning, migrationPlanningDone,
+  onStartMigration,
+  isGenerating, codeGenerationDone, generatedCount, failedCount, onStartGeneration,
+  isVerifying, verificationDone, verifiedCount, verificationFailedCount, onStartVerification,
 }: Props) {
   const isRunning  = ['scanning', 'planning'].includes(status);
   const isIdle     = status === 'idle';
@@ -87,7 +96,7 @@ export default function ActionButtons({
               background: 'rgba(204,167,0,0.08)', border: '1px solid rgba(204,167,0,0.2)',
               borderRadius: '4px', padding: '5px 8px'
             }}>
-              <span style={{ fontSize: 11 }}>⚠️</span>
+              <AlertTriangle size={11} />
               <span>{disabledReason}</span>
             </div>
           )}
@@ -121,6 +130,91 @@ export default function ActionButtons({
         <div className="completion-badge-premium">
           <CheckCircle2 size={16} />
           <span>Stage-1 Analysis complete!</span>
+        </div>
+      )}
+
+      {/* Stage 2 — Start Migration Planning (shown once Stage 1 is complete) */}
+      {detectedStack && planPhaseDone && (isComplete || isPlanning || migrationPlanningDone) && onStartMigration && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4, borderTop: '1px solid var(--border-subtle)', paddingTop: 8 }}>
+          <button
+            className="btn-premium btn-premium--primary"
+            onClick={onStartMigration}
+            disabled={!canStartMigration || isPlanning}
+            title={!canStartMigration ? migrationDisabledReason : undefined}
+            style={{ opacity: canStartMigration && !isPlanning ? 1 : 0.45 }}
+          >
+            <Play size={13} />
+            <span>{isPlanning ? 'Planning Migration...' : migrationPlanningDone ? 'Re-plan Migration' : 'Start Code Migration'}</span>
+          </button>
+
+          {!canStartMigration && !isPlanning && migrationDisabledReason && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '5px',
+              fontSize: '11px', color: 'var(--text-warning)',
+              background: 'rgba(204,167,0,0.08)', border: '1px solid rgba(204,167,0,0.2)',
+              borderRadius: '4px', padding: '5px 8px'
+            }}>
+              <AlertTriangle size={11} />
+              <span>{migrationDisabledReason}</span>
+            </div>
+          )}
+
+          {migrationPlanningDone && !isPlanning && (
+            <div className="completion-badge-premium">
+              <CheckCircle2 size={16} />
+              <span>Migration plan ready — review below.</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Stage 2 — Start Code Generation (shown once a plan exists to generate from) */}
+      {migrationPlanningDone && !isPlanning && onStartGeneration && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4, borderTop: '1px solid var(--border-subtle)', paddingTop: 8 }}>
+          <button
+            className="btn-premium btn-premium--primary"
+            onClick={onStartGeneration}
+            disabled={isGenerating}
+            style={{ opacity: isGenerating ? 0.45 : 1 }}
+          >
+            <Play size={13} />
+            <span>{isGenerating ? 'Generating Code...' : codeGenerationDone ? 'Re-generate Code' : 'Generate Code'}</span>
+          </button>
+
+          {codeGenerationDone && !isGenerating && (
+            <div className="completion-badge-premium">
+              <CheckCircle2 size={16} />
+              <span>
+                Code generation complete — {generatedCount ?? 0} generated
+                {failedCount ? `, ${failedCount} failed` : ''}.
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Stage 2 — Start Verification (shown once at least one file is generated) */}
+      {(generatedCount ?? 0) > 0 && !isGenerating && onStartVerification && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4, borderTop: '1px solid var(--border-subtle)', paddingTop: 8 }}>
+          <button
+            className="btn-premium btn-premium--primary"
+            onClick={onStartVerification}
+            disabled={isVerifying}
+            style={{ opacity: isVerifying ? 0.45 : 1 }}
+          >
+            <Play size={13} />
+            <span>{isVerifying ? 'Verifying...' : verificationDone ? 'Re-verify' : 'Verify Code'}</span>
+          </button>
+
+          {verificationDone && !isVerifying && (
+            <div className="completion-badge-premium">
+              <CheckCircle2 size={16} />
+              <span>
+                Verification complete — {verifiedCount ?? 0} verified
+                {verificationFailedCount ? `, ${verificationFailedCount} still failing` : ''}.
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>

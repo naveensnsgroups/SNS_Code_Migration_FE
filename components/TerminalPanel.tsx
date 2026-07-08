@@ -1,24 +1,9 @@
 'use client';
 
-// =============================================================================
-//  TerminalPanel.tsx — SNS IDE Toolcall-Part-Renderer Pattern
-//
-//  Mirrors: snside/packages/ai-chat-ui/src/browser/chat-response-renderer/
-//           toolcall-part-renderer.tsx + thinking-part-renderer.tsx
-//
-//  Key design decisions (copied from SNS IDE source):
-//  1. <details>/<summary> — native HTML, browser handles expand/collapse
-//  2. Tool call row: "Ran toolName(condensedArgs)" — SNS IDE line 258
-//  3. Thinking block: <details><summary>Thinking</summary><pre>...</pre></details>
-//  4. condenseArguments: show "key: value, key2: value2" truncated to 80 chars
-//  5. Result data shown inside <details> expanded body — same as SNS IDE
-//  6. Auto-collapse on finish, spinner for in-flight calls
-//  7. CSS classes from globals.css — NOT inline styles
-//  8. [Tag] prefix badges — color-coded pill per subsystem
-// =============================================================================
+// Renders tool-call/thinking log blocks using native <details>/<summary> for expand/collapse.
 
 import { LogEntry, LogLevel } from '@/types';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   AlertTriangle,
@@ -331,9 +316,7 @@ function GenericRow({ log }: { log: LogEntry }) {
     warning: <AlertTriangle size={12} style={{ color: 'var(--text-warning)' }} />,
     command: <ChevronRight  size={12} style={{ color: 'var(--accent-yellow)' }} />,
     info:    <Info          size={12} style={{ color: 'var(--text-info)', opacity: 0.8 }} />,
-    // 'stream' entries are always grouped into StreamBlock before reaching
-    // GenericRow (see groupLogs above) — this exists only to satisfy the
-    // Record<LogLevel, ...> exhaustiveness check, it never actually renders.
+    // Never actually renders — exists only to satisfy the Record<LogLevel, ...> exhaustiveness check.
     stream:  <Info          size={12} style={{ color: 'var(--text-info)', opacity: 0.8 }} />,
   };
 
@@ -365,7 +348,9 @@ export default function TerminalPanel({ logs, isRunning, height }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
-  const blocks = groupLogs(logs);
+  // Memoized so a re-render NOT caused by new logs (resize, parent state
+  // changes elsewhere in AIPanel, etc.) doesn't re-walk the whole list.
+  const blocks = useMemo(() => groupLogs(logs), [logs]);
 
   return (
     <div className="bottom-panel" style={height ? { height: `${height}px` } : undefined}>

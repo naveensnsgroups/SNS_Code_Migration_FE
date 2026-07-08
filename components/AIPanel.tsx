@@ -1,29 +1,21 @@
-// =============================================================================
-//  components/AIPanel.tsx  —  Operational Panel (right sidebar)
-//
-//  Orchestrator only: manages provider/model/API-key state and settings sync.
-//  Rendering is delegated to focused sub-components in components/ai-panel/.
-//
-//  Sub-components:
-//    StackBadge       — detected stack display
-//    TargetConfig     — target framework/db/language/test free-text inputs
-//    PipelineProgress — live progress bar + phase badges
-//    ActionButtons    — Start / Pause / Stop / Resume
-// =============================================================================
+// Operational Panel orchestrator — manages provider/model/API-key state; rendering
+// is delegated to focused sub-components in components/ai-panel/.
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { Activity } from 'lucide-react';
-import type { DetectedStack, MigrationStatus, MigrationPhase, TargetStack, AIProvider } from '@/types';
+import type { DetectedStack, MigrationStatus, MigrationPhase, TargetStack, AIProvider, MigrationTaskEntry, RuleCoverageEntry } from '@/types';
 import type { LogEntry } from '@/types';
 
 import { readSettings } from '@/hooks/useSettings';
 import { useLiveStatus } from '@/hooks/useLiveStatus';
+import { ALL_PROVIDERS } from '@/constants/models';
 
 import StackBadge         from '@/components/ai-panel/StackBadge';
 import TargetConfig       from '@/components/ai-panel/TargetConfig';
 import PipelineProgress   from '@/components/ai-panel/PipelineProgress';
 import ActionButtons      from '@/components/ai-panel/ActionButtons';
+import MigrationTaskList  from '@/components/ai-panel/MigrationTaskList';
 import LiveStatusOverlay  from '@/components/live-status/LiveStatusOverlay';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -45,6 +37,17 @@ interface Props {
   settingsTrigger?: number;
   onSettingsSaved?: () => void;
   width?:           number;
+  // Stage 2 — Migration Planning
+  migrationTaskList?:  MigrationTaskEntry[] | null;
+  ruleCoverageReport?: RuleCoverageEntry[] | null;
+  isPlanning?:         boolean;
+  onStartMigration?:   (target: TargetStack) => void;
+  // Stage 2 — Code Generation
+  isGenerating?:       boolean;
+  onStartGeneration?:  (target: TargetStack) => void;
+  // Stage 2 — Verification
+  isVerifying?:        boolean;
+  onStartVerification?: (target: TargetStack) => void;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -67,6 +70,9 @@ export default function AIPanel({
   logs, hasProject, activeTool, toolCallHistory,
   onStart, onStop, onPause,
   settingsTrigger = 0, onSettingsSaved, width,
+  migrationTaskList, ruleCoverageReport, isPlanning, onStartMigration,
+  isGenerating, onStartGeneration,
+  isVerifying, onStartVerification,
 }: Props) {
   // Model and apiKey start as '' — readSettings() fills them immediately in useEffect below
   const [provider, setProvider] = useState<AIProvider>('google');
@@ -82,10 +88,7 @@ export default function AIPanel({
   // ── Derived flags ──────────────────────────────────────────────────────────
   const isRunning     = ['scanning', 'planning'].includes(status);
   const isComplete    = status === 'complete';
-  // Renamed from the historical "planPhaseDone" — this checks the SCAN phase
-  // specifically (stack detection), not a "plan" phase that never existed.
-  // Gates showing TargetConfig, since target framework/db/lang selection
-  // needs detectedStack to already be populated.
+  // Gates showing TargetConfig — target framework/db/lang selection needs detectedStack.
   const scanPhaseDone = phases.find(p => p.id === 'scan')?.status === 'done';
 
   // ── Live Status Overlay toggle (manual only) ───────────────────────────
@@ -124,8 +127,7 @@ export default function AIPanel({
   const hasApiKey = (() => {
     if (apiKey.trim()) return true;
     if (typeof window === 'undefined') return false;
-    const providers = ['anthropic', 'openai', 'google', 'grok', 'groq', 'openrouter', 'mistral', 'huggingface'];
-    return providers.some(p => {
+    return ALL_PROVIDERS.some(p => {
       const raw = localStorage.getItem(`setting_${p}_api_key`);
       if (!raw) return false;
       try { return !!(JSON.parse(raw)?.trim()); } catch { return !!raw.trim(); }
@@ -150,6 +152,71 @@ export default function AIPanel({
     });
   }, [provider, model, targetFramework, targetDb, targetLang, testFramework, onStart]);
 
+  // ── Stage 2 — Start Migration Planning ─────────────────────────────────────
+  const allTargetFieldsFilled =
+    targetFramework.trim().length > 0 &&
+    targetDb.trim().length > 0 &&
+    targetLang.trim().length > 0 &&
+    testFramework.trim().length > 0;
+
+  const canStartMigration = hasApiKey && hasModel && allTargetFieldsFilled;
+  const migrationDisabledReason = !allTargetFieldsFilled
+    ? 'Fill in all 4 Target Configuration fields first'
+    : !hasApiKey
+    ? 'Add an API key in Settings first'
+    : !hasModel
+    ? 'Select a model in Settings first'
+    : '';
+
+  const handleStartMigration = useCallback(() => {
+    onStartMigration?.({
+      provider,
+      model,
+      framework:     targetFramework,
+      database:      targetDb,
+      language:      targetLang,
+      testFramework,
+      outputMode:    'direct',
+    });
+  }, [provider, model, targetFramework, targetDb, targetLang, testFramework, onStartMigration]);
+
+  // ── Stage 2 — Start Code Generation ────────────────────────────────────────
+  const generatedCount = (migrationTaskList ?? []).filter(t => t.status === 'generated' || t.status === 'verified').length;
+  const failedCount    = (migrationTaskList ?? []).filter(t => t.status === 'failed').length;
+  const codeGenerationDone =
+    !!migrationTaskList && migrationTaskList.length > 0 &&
+    migrationTaskList.every(t => t.status !== 'pending');
+
+  const handleStartGeneration = useCallback(() => {
+    onStartGeneration?.({
+      provider,
+      model,
+      framework:     targetFramework,
+      database:      targetDb,
+      language:      targetLang,
+      testFramework,
+      outputMode:    'direct',
+    });
+  }, [provider, model, targetFramework, targetDb, targetLang, testFramework, onStartGeneration]);
+
+  // ── Stage 2 — Start Verification ───────────────────────────────────────────
+  const verifiedCount = (migrationTaskList ?? []).filter(t => t.status === 'verified').length;
+  const verificationDone =
+    verifiedCount > 0 ||
+    (migrationTaskList ?? []).some(t => t.lastError?.includes('Unresolved cross-file reference'));
+
+  const handleStartVerification = useCallback(() => {
+    onStartVerification?.({
+      provider,
+      model,
+      framework:     targetFramework,
+      database:      targetDb,
+      language:      targetLang,
+      testFramework,
+      outputMode:    'direct',
+    });
+  }, [provider, model, targetFramework, targetDb, targetLang, testFramework, onStartVerification]);
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <aside className="ai-panel" style={{ width: width ? `${width}px` : undefined }}>
@@ -170,61 +237,85 @@ export default function AIPanel({
         </button>
       </div>
 
+      {/* Live Activity and the Operational Panel's own content (Target
+          Config, Pipeline Stages, Action Buttons, Migration Plan) are two
+          DIFFERENT views — only one is ever mounted at a time. Toggling Live
+          Activity fully unmounts the other panels instead of just visually
+          covering them, so there's nothing left in the DOM that could ever
+          leak/scroll into view underneath it. */}
       <div className="ai-panel__body" style={{ position: 'relative' }}>
-
-        {/* Detected Stack */}
-        <StackBadge detectedStack={detectedStack} />
-
-        {/* Live Status — active tool, agent, stage, file, alerts (OLD EMBEDDED — removed) */}
-
-        {/* Target Config — free-text inputs, visible after Stage-1 plan */}
-        {detectedStack && scanPhaseDone && (
-          <TargetConfig
-            detectedStack={detectedStack}
-            targetFramework={targetFramework}
-            targetDb={targetDb}
-            targetLang={targetLang}
-            testFramework={testFramework}
-            disabled={isRunning}
-            onFrameworkChange={v => { setTargetFramework(v); save('setting_target_framework', v); }}
-            onDbChange={v        => { setTargetDb(v);        save('setting_target_database', v);  }}
-            onLangChange={v      => { setTargetLang(v);      save('setting_target_lang', v);       }}
-            onTestChange={v      => { setTestFramework(v);   save('setting_testing_framework', v); }}
-          />
-        )}
-
-        {/* Live progress + phase badges */}
-        <PipelineProgress
-          phases={phases}
-          progress={progress}
-          currentFile={currentFile}
-          isRunning={isRunning}
-          isComplete={isComplete}
-        />
-
-        {/* Action Buttons */}
-        <ActionButtons
-          status={status}
-          detectedStack={detectedStack}
-          hasApiKey={hasApiKey}
-          hasModel={hasModel}
-          hasProject={hasProject}
-          planPhaseDone={scanPhaseDone}
-          onStart={handleStart}
-          onStop={onStop}
-          onPause={onPause}
-        />
-
-        {/* Live Activity Overlay — covers body when toggled, config panels stay mounted below */}
-        {liveOpen && (
+        {liveOpen ? (
           <LiveStatusOverlay
             data={liveData}
             status={status}
+            phases={phases}
             isRunning={isRunning}
             onClose={() => setLiveOpen(false)}
           />
-        )}
+        ) : (
+          <>
+            {/* Detected Stack */}
+            <StackBadge detectedStack={detectedStack} />
 
+            {/* Target Config — free-text inputs, visible after Stage-1 plan */}
+            {detectedStack && scanPhaseDone && (
+              <TargetConfig
+                detectedStack={detectedStack}
+                targetFramework={targetFramework}
+                targetDb={targetDb}
+                targetLang={targetLang}
+                testFramework={testFramework}
+                disabled={isRunning}
+                onFrameworkChange={v => { setTargetFramework(v); save('setting_target_framework', v); }}
+                onDbChange={v        => { setTargetDb(v);        save('setting_target_database', v);  }}
+                onLangChange={v      => { setTargetLang(v);      save('setting_target_lang', v);       }}
+                onTestChange={v      => { setTestFramework(v);   save('setting_testing_framework', v); }}
+              />
+            )}
+
+            {/* Live progress + phase badges */}
+            <PipelineProgress
+              phases={phases}
+              progress={progress}
+              currentFile={currentFile}
+              isRunning={isRunning}
+              isComplete={isComplete}
+            />
+
+            {/* Action Buttons */}
+            <ActionButtons
+              status={status}
+              detectedStack={detectedStack}
+              hasApiKey={hasApiKey}
+              hasModel={hasModel}
+              hasProject={hasProject}
+              planPhaseDone={scanPhaseDone}
+              onStart={handleStart}
+              onStop={onStop}
+              onPause={onPause}
+              canStartMigration={canStartMigration}
+              migrationDisabledReason={migrationDisabledReason}
+              isPlanning={isPlanning}
+              migrationPlanningDone={!!migrationTaskList && migrationTaskList.length > 0}
+              onStartMigration={onStartMigration ? handleStartMigration : undefined}
+              isGenerating={isGenerating}
+              codeGenerationDone={codeGenerationDone}
+              generatedCount={generatedCount}
+              failedCount={failedCount}
+              onStartGeneration={onStartGeneration ? handleStartGeneration : undefined}
+              isVerifying={isVerifying}
+              verificationDone={verificationDone}
+              verifiedCount={verifiedCount}
+              verificationFailedCount={failedCount}
+              onStartVerification={onStartVerification ? handleStartVerification : undefined}
+            />
+
+            {/* Stage 2 — Migration Plan review (the human checkpoint) */}
+            {migrationTaskList && migrationTaskList.length > 0 && (
+              <MigrationTaskList tasks={migrationTaskList} ruleCoverage={ruleCoverageReport ?? []} />
+            )}
+          </>
+        )}
       </div>
     </aside>
   );
