@@ -1,7 +1,10 @@
 // Applies the 'general_theme' setting ('dark' | 'light' | 'hc') to <html>,
 // matching the :root.theme-light / :root.theme-hc selectors in globals.css.
 
-const THEME_CLASSES: Record<string, string> = {
+// Exported so app/layout.tsx's pre-hydration init script can import the real
+// mapping (at build/server time) instead of hand-duplicating it — one source
+// of truth, no risk of the two drifting out of sync.
+export const THEME_CLASSES: Record<string, string> = {
   light: 'theme-light',
   hc: 'theme-hc',
 };

@@ -14,6 +14,7 @@ import {
   MIGRATION_PHASES,
   MigrationTaskEntry,
   RuleCoverageEntry,
+  GraphResolutionSummary,
 } from '@/types';
 import type { ToolCallHistoryItem } from '@/components/live-status/types';
 import {
@@ -25,6 +26,9 @@ import {
   fetchModernTree,
   fetchSessionTokens,
   fetchSessionState,
+  fetchGraphSummary,
+  continueAnalysis,
+  skipToStage2,
   downloadFile,
 } from '@/services/api';
 
@@ -47,7 +51,7 @@ function timestamp(): string {
 const VALID_LOG_LEVELS = new Set<LogEntry['level']>(['info', 'success', 'error', 'warning', 'command', 'stream']);
 const VALID_MIGRATION_STATUSES = new Set<MigrationStatus>([
   'idle', 'scanning', 'planning', 'discovery', 'file-analysis',
-  'graph-resolution', 'section-writing', 'assembly',
+  'graph-resolution', 'awaiting-graph-review', 'section-writing', 'assembly',
   'migration-planning', 'code-generation', 'verification', 'migration-assembly',
   'complete', 'error', 'paused',
 ]);
@@ -123,9 +127,14 @@ export interface UseMigrationReturn {
   isPlanning: boolean;
   isGenerating: boolean;
   isVerifying: boolean;
+  // HITL graph-review checkpoint (status 'awaiting-graph-review')
+  graphResolutionSummary: GraphResolutionSummary | null;
+  isCheckpointBusy: boolean;
   // Handlers
   handleUpload: (files: FileList | File[], explicitPaths?: string[]) => Promise<void>;
   handleStart: (target: TargetStack) => Promise<void>;
+  handleContinueAnalysis: () => Promise<void>;
+  handleSkipToStage2: () => Promise<void>;
   handleStartMigrationPlanning: (target: TargetStack) => Promise<void>;
   handleStartCodeGeneration: (target: TargetStack) => Promise<void>;
   handleStartVerification: (target: TargetStack) => Promise<void>;
@@ -157,6 +166,10 @@ export function useMigration(
   const [modernFolderBasename, setModernFolderBasename] = useState<string>('');
   const [tokenUsage, setTokenUsage]       = useState<TokenUsage | null>(null);
   const [activeTool, setActiveTool]       = useState<{ name: string; args: string } | null>(null);
+  // HITL graph-review checkpoint — the resolved-graph summary + an in-flight flag
+  // for the continue/skip actions.
+  const [graphResolutionSummary, setGraphResolutionSummary] = useState<GraphResolutionSummary | null>(null);
+  const [isCheckpointBusy, setIsCheckpointBusy] = useState(false);
   // Tool call history — SSE-driven, newest first, capped at 20
   const [toolCallHistory, setToolCallHistory] = useState<ToolCallHistoryItem[]>([]);
   // Pending tool call staging, keyed by call id so overlapping calls don't overwrite each other.
@@ -319,6 +332,12 @@ export function useMigration(
         ) {
           codeMigrationRef.current?.refreshFromSession(sessionId);
         }
+        // HITL checkpoint reached — pull the resolved-graph summary to review.
+        if (nextStatus === 'awaiting-graph-review' && sessionId) {
+          fetchGraphSummary(backendUrl, sessionId)
+            .then(setGraphResolutionSummary)
+            .catch(() => { /* non-critical — the checkpoint UI will show empty */ });
+        }
         if (sessionId) refreshModernTree(sessionId);
         break;
       }
@@ -433,6 +452,8 @@ export function useMigration(
         setStatus(state.status as MigrationStatus);
         codeMigrationRef.current?.setMigrationTaskList(state.migrationTaskList ?? null);
         codeMigrationRef.current?.setRuleCoverageReport(state.ruleCoverageReport ?? null);
+        // Restore the HITL checkpoint if the session was reloaded while awaiting review.
+        setGraphResolutionSummary(state.graphResolutionSummary ?? null);
 
         const stillRunning = [
           'scanning', 'planning', 'discovery', 'file-analysis',
@@ -477,6 +498,12 @@ export function useMigration(
     formData.append('retryDelayRateLimit', settings.googleRetryDelayRateLimit.toString());
     formData.append('retryDelayOther',     settings.googleRetryDelayOther.toString());
     formData.append('timeoutMs',           settings.googleTimeoutMs.toString());
+    // Needed so the Scanner (which now resolves its model the same way every
+    // other agent does) can find a per-agent override or a different provider's
+    // key at scan time — not just the single active provider's key.
+    formData.append('apiKeys', JSON.stringify(settings.allApiKeys));
+    formData.append('aliasesConfig', JSON.stringify(settings.aliasesConfig));
+    formData.append('agentsConfig', localStorage.getItem('ai_config_agents') || 'null');
 
     try {
       const data = await scanProject(backendUrl, formData);
@@ -550,6 +577,46 @@ export function useMigration(
     }
   }, [sessionId, addLog, backendUrl, openSSE]);
 
+  // ── HITL — Continue to Analysis Report ─────────────────────────────────────
+  const handleContinueAnalysis = useCallback(async () => {
+    if (!sessionId) return;
+    setIsCheckpointBusy(true);
+    addLog('Continuing to analysis report...', 'command');
+
+    const settings = readSettings();
+    const combinedApiKey =
+      settings.allApiKeys.anthropic || settings.allApiKeys.openai || settings.allApiKeys.google ||
+      settings.allApiKeys.grok || settings.allApiKeys.groq || settings.allApiKeys.openrouter ||
+      settings.allApiKeys.mistral || settings.allApiKeys.huggingface || '';
+
+    try {
+      await continueAnalysis(backendUrl, sessionId, combinedApiKey, settings.allApiKeys);
+      setGraphResolutionSummary(null);   // leaving the checkpoint
+      openSSE(`${backendUrl}/api/stream/${sessionId}`);
+    } catch (err: unknown) {
+      addLog(`Continue failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+    } finally {
+      setIsCheckpointBusy(false);
+    }
+  }, [sessionId, addLog, backendUrl, openSSE]);
+
+  // ── HITL — Skip to Code Migration ──────────────────────────────────────────
+  const handleSkipToStage2 = useCallback(async () => {
+    if (!sessionId) return;
+    setIsCheckpointBusy(true);
+    addLog('Skipping analysis report — proceeding to code migration...', 'command');
+
+    try {
+      await skipToStage2(backendUrl, sessionId);
+      setGraphResolutionSummary(null);   // leaving the checkpoint
+      openSSE(`${backendUrl}/api/stream/${sessionId}`);
+    } catch (err: unknown) {
+      addLog(`Skip failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+    } finally {
+      setIsCheckpointBusy(false);
+    }
+  }, [sessionId, addLog, backendUrl, openSSE]);
+
   // ── Stop ─────────────────────────────────────────────────────────────────────
   const handleStop = useCallback(async () => {
     closeSSE();
@@ -558,6 +625,10 @@ export function useMigration(
     try {
       if (sessionId) await stopMigration(backendUrl, sessionId);
       setStatus('idle');
+      // Without this, status='idle' would coexist with the last non-zero progress
+      // value — exactly the stale state the Live panel's idle+realPct check treats
+      // as "still running", so it would flash "Running X%" again right after Stop.
+      setProgress(0);
       addLog('Migration stopped by user.', 'warning');
     } catch (err: unknown) {
       // The backend call failed — the pipeline may still be running server-side.
@@ -625,7 +696,9 @@ export function useMigration(
     migrationTaskList: codeMigration.migrationTaskList,
     ruleCoverageReport: codeMigration.ruleCoverageReport,
     isPlanning, isGenerating, isVerifying,
+    graphResolutionSummary, isCheckpointBusy,
     handleUpload, handleStart,
+    handleContinueAnalysis, handleSkipToStage2,
     handleStartMigrationPlanning: codeMigration.handleStartMigrationPlanning,
     handleStartCodeGeneration: codeMigration.handleStartCodeGeneration,
     handleStartVerification: codeMigration.handleStartVerification,

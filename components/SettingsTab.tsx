@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Search, Eye, EyeOff, Plus, Trash2, Sliders, HelpCircle, Check, Settings, X } from 'lucide-react';
 import { DEFAULT_PROVIDER_MODELS, ALL_PROVIDERS } from '@/constants/models';
 import { DEFAULT_BACKEND_URL } from '@/hooks/useSettings';
 import { applyTheme } from '@/utils/theme';
+import { useNotifications } from '@/context/NotificationContext';
 
 interface SettingField {
   id: string;
@@ -210,14 +211,6 @@ const SETTING_FIELDS: SettingField[] = [
     defaultValue: '',
   },
   {
-    id: 'general_telemetry',
-    category: 'General',
-    label: 'Enable Anonymous Telemetry',
-    description: 'Transmit anonymous telemetry statistics to improve model translation and repair patterns.',
-    type: 'boolean',
-    defaultValue: false,
-  },
-  {
     id: 'general_theme',
     category: 'General',
     label: 'Color Theme',
@@ -238,6 +231,24 @@ interface Props {
   settingsTrigger?: number;
 }
 
+// Builds a concise, Theia-style confirmation message for a committed setting.
+// Pure (params only) → module-level so it isn't recreated each render.
+function messageForField(field: SettingField, value: any): string {
+  switch (field.id) {
+    case 'general_theme': {
+      const label = field.options?.find(o => o.value === value)?.label ?? value;
+      return `Color theme changed to ${label}`;
+    }
+    case 'general_backend_url':
+      return 'Backend API service URL updated';
+    case 'general_local_output_path':
+      return value ? 'Output workspace path updated' : 'Output workspace path cleared';
+  }
+  if (field.type === 'password')
+    return value ? `${field.category} API key saved` : `${field.category} API key cleared`;
+  return `${field.label} updated`;
+}
+
 export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeScope, setActiveScope] = useState<'user' | 'workspace'>('user');
@@ -250,6 +261,16 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
   const [selectedModels, setSelectedModels] = useState<Record<string, string>>({});
   // Tracks which provider is currently active (set when user clicks a model in any provider's list)
   const [activeProvider, setActiveProvider] = useState<string>('');
+  // Providers referenced by a per-agent "Override Model" pick (AI Config → Agents) —
+  // these are genuinely doing work for that agent too, alongside (or instead of)
+  // whichever provider is the plain default above.
+  const [agentOverrideProviders, setAgentOverrideProviders] = useState<Set<string>>(new Set());
+
+  // SNS IDE-style notifications on setting changes (toast + history).
+  const { notify } = useNotifications();
+  // Value captured when a text/password field gains focus — so blur only notifies
+  // if the value actually changed (no toast storm on every focus/blur).
+  const focusValueRef = useRef<Record<string, string>>({});
 
   // Load settings from localStorage
   useEffect(() => {
@@ -285,6 +306,23 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
     } else {
       setActiveProvider('google'); // default
     }
+
+    // Load per-agent overrides (AI Config → Agents → Override Model) and collect
+    // every provider they point at. A saved selectedModel is only a real override
+    // when it's a "provider/model" string (see AgentsTab's modelOptions / handleUpdateModel) —
+    // an alias identifier like "alias:reasoning-model" is just the unset default
+    // shown for display and doesn't pin a specific provider on its own.
+    const overrideProviders = new Set<string>();
+    try {
+      const agentOverrides: Record<string, { selectedModel?: string }> =
+        JSON.parse(localStorage.getItem('ai_config_agents') || '{}');
+      Object.values(agentOverrides).forEach(entry => {
+        const value = entry?.selectedModel;
+        const slash = value?.indexOf('/') ?? -1;
+        if (value && slash > 0) overrideProviders.add(value.slice(0, slash));
+      });
+    } catch {}
+    setAgentOverrideProviders(overrideProviders);
   }, [settingsTrigger]);
 
   // Filter settings based on query
@@ -305,8 +343,9 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
     }
   }, [searchQuery, activeCategory, availableCategories]);
 
-  // Save changes for a field
-  const updateSetting = (id: string, value: any) => {
+  // Save changes for a field. `emitNotification` is opt-in so text/password fields
+  // (which call this on every keystroke) can stay silent and notify on blur instead.
+  const updateSetting = (id: string, value: any, emitNotification = false) => {
     const updated = { ...settings, [id]: value };
     setSettings(updated);
     localStorage.setItem(`setting_${id}`, JSON.stringify(value));
@@ -315,9 +354,14 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
 
     // Trigger callback
     if (onSettingsSaved) onSettingsSaved();
-    
+
     setSaveStatus('Settings updated');
     setTimeout(() => setSaveStatus(null), 1500);
+
+    if (emitNotification) {
+      const field = SETTING_FIELDS.find(f => f.id === id);
+      if (field) notify({ type: 'success', message: messageForField(field, value) });
+    }
   };
 
   const handleAddValue = (fieldId: string) => {
@@ -328,14 +372,29 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
     if (!list.includes(val)) {
       list.push(val);
       updateSetting(fieldId, list);
+      const field = SETTING_FIELDS.find(f => f.id === fieldId);
+      notify({ type: 'success', message: `Model "${val}" added${field ? ` to ${field.category}` : ''}` });
     }
     setNewModelInputs({ ...newModelInputs, [fieldId]: '' });
   };
 
   const handleRemoveValue = (fieldId: string, index: number) => {
     const list = [...(settings[fieldId] || [])];
+    const removed = list[index];
     list.splice(index, 1);
     updateSetting(fieldId, list);
+    if (removed) notify({ type: 'info', message: `Model "${removed}" removed` });
+  };
+
+  // Text/password fields: capture value on focus, notify on blur only if it changed.
+  const handleTextFocus = (field: SettingField) => {
+    focusValueRef.current[field.id] = settings[field.id] || '';
+  };
+  const handleTextBlur = (field: SettingField) => {
+    const current = settings[field.id] || '';
+    if (current !== (focusValueRef.current[field.id] ?? '')) {
+      notify({ type: 'success', message: messageForField(field, current) });
+    }
   };
 
   return (
@@ -411,7 +470,17 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
                 'Grok': 'grok', 'Groq': 'groq', 'OpenRouter': 'openrouter',
                 'Mistral': 'mistral', 'Hugging Face': 'huggingface',
               };
-              const isActiveProvider = catToProvider[cat] === activeProvider;
+              const provider = catToProvider[cat];
+              // Two independent reasons a provider can be doing real work, and both
+              // can be true for different providers at once: it's the plain fallback
+              // (activeProvider) used by every agent with no override, and/or at least
+              // one agent in AI Config → Agents has an explicit Override Model pointed
+              // at it. Showing only one badge for the single activeProvider was
+              // misleading once per-agent overrides existed — e.g. the Scanner
+              // overridden to Google while everything else defaults to Anthropic used
+              // to leave Google looking unused here.
+              const isDefaultProvider = provider === activeProvider;
+              const isAgentOverrideProvider = agentOverrideProviders.has(provider);
 
               return (
                 <li
@@ -421,12 +490,24 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
                 >
                   <span className="category-item-text">{cat}</span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    {isActiveProvider && (
+                    {isDefaultProvider && (
+                      // Solid green chip with white text — a fixed status color so it
+                      // reads on a normal row, the blue selected row, and in every theme
+                      // (the old faint-green-on-faint-green vanished on the selected row).
                       <span style={{
-                        fontSize: '9px', fontWeight: 700, color: 'var(--accent-green)',
-                        background: 'rgba(0,200,100,0.12)', border: '1px solid rgba(0,200,100,0.3)',
-                        borderRadius: '3px', padding: '1px 4px', letterSpacing: '0.3px',
-                      }}>ACTIVE</span>
+                        fontSize: '9px', fontWeight: 700, color: '#ffffff',
+                        background: '#1a7f37', border: '1px solid #1a7f37',
+                        borderRadius: '3px', padding: '1px 5px', letterSpacing: '0.4px',
+                      }}>DEFAULT</span>
+                    )}
+                    {isAgentOverrideProvider && (
+                      // Separate blue chip — this provider is pinned by at least one
+                      // agent's own Override Model, independent of the global default.
+                      <span style={{
+                        fontSize: '9px', fontWeight: 700, color: '#ffffff',
+                        background: '#0969da', border: '1px solid #0969da',
+                        borderRadius: '3px', padding: '1px 5px', letterSpacing: '0.4px',
+                      }}>AGENT</span>
                     )}
                     <span className="category-item-count">{count}</span>
                   </span>
@@ -440,9 +521,13 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
         <div className="settings-fields-pane">
           {filteredFields.filter(f => f.category === activeCategory).map(field => (
             <div key={field.id} className="settings-field-block">
-              {/* Field Breadcrumb */}
+              {/* Field Breadcrumb — muted path, prominent current setting (VS Code style) */}
               <div className="field-block__breadcrumb">
-                Ai-features › {field.category} › {field.label}
+                <span className="field-block__crumb">Ai-features</span>
+                <span className="field-block__crumb-sep">›</span>
+                <span className="field-block__crumb">{field.category}</span>
+                <span className="field-block__crumb-sep">›</span>
+                <span className="field-block__crumb-current">{field.label}</span>
               </div>
 
               {/* Field Description */}
@@ -461,6 +546,8 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
                       placeholder="key not set (uses env variable fallback)"
                       value={settings[field.id] || ''}
                       onChange={(e) => updateSetting(field.id, e.target.value)}
+                      onFocus={() => handleTextFocus(field)}
+                      onBlur={() => handleTextBlur(field)}
                     />
                     <button
                       type="button"
@@ -480,14 +567,16 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
                     style={{ maxWidth: '480px' }}
                     value={settings[field.id] || ''}
                     onChange={(e) => updateSetting(field.id, e.target.value)}
+                    onFocus={() => handleTextFocus(field)}
+                    onBlur={() => handleTextBlur(field)}
                   />
                 )}
 
                 {/* 3. BOOLEAN TYPE */}
                 {field.type === 'boolean' && (
-                  <div 
-                    className="toggle-switch" 
-                    onClick={() => updateSetting(field.id, !settings[field.id])}
+                  <div
+                    className="toggle-switch"
+                    onClick={() => updateSetting(field.id, !settings[field.id], true)}
                     style={{ cursor: 'pointer' }}
                   >
                     <input 
@@ -518,6 +607,8 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
                     if (onSettingsSaved) onSettingsSaved();
                     setSaveStatus(`Active provider → ${provider}  ·  model → ${model}`);
                     setTimeout(() => setSaveStatus(null), 3000);
+
+                    notify({ type: 'success', message: `Default model set to ${model} (${field.category})` });
                   };
 
                   return (
@@ -529,8 +620,8 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
                         marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px'
                       }}>
                         {activeModel
-                          ? <><Check size={11} /><span>Click a model below to select it as active</span></>
-                          : <><HelpCircle size={11} /><span>Click a model below to select it as active</span></>}
+                          ? <><Check size={11} /><span>Click a model below to set it as the default — used by any agent with no override in AI Config → Agents</span></>
+                          : <><HelpCircle size={11} /><span>Click a model below to set it as the default — used by any agent with no override in AI Config → Agents</span></>}
                       </div>
 
                       {/* List Items */}
@@ -601,7 +692,7 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
                     <select
                       className="form-select-premium"
                       value={settings[field.id] || field.defaultValue}
-                      onChange={(e) => updateSetting(field.id, e.target.value)}
+                      onChange={(e) => updateSetting(field.id, e.target.value, true)}
                     >
                       {field.options?.map(opt => (
                         <option key={opt.value} value={opt.value}>

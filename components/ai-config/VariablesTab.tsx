@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import { Globe, Edit3, Check, X } from 'lucide-react';
 import { ALL_PROVIDERS } from '@/constants/models';
+import { useNotifications } from '@/context/NotificationContext';
 
 interface GlobalVar {
   id: string;
@@ -50,6 +51,7 @@ function EditableRow({ variable }: EditableRowProps) {
   const [value,   setValue]   = useState('');
   const [editing, setEditing] = useState(false);
   const [draft,   setDraft]   = useState('');
+  const { notify } = useNotifications();
 
   const isComplexValue = (() => {
     if (!value) return false;
@@ -61,8 +63,11 @@ function EditableRow({ variable }: EditableRowProps) {
   }, [variable.storageKey]);
 
   const commit = () => {
-    localStorage.setItem(variable.storageKey, JSON.stringify(draft));
-    setValue(draft);
+    if (draft !== value) {
+      localStorage.setItem(variable.storageKey, JSON.stringify(draft));
+      setValue(draft);
+      notify({ type: 'success', message: `${variable.name} updated` });
+    }
     setEditing(false);
   };
 
@@ -86,7 +91,7 @@ function EditableRow({ variable }: EditableRowProps) {
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 600, color: 'var(--text-info)' }}>
             {variable.name}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
             {variable.description}
           </div>
         </div>
@@ -132,7 +137,7 @@ function EditableRow({ variable }: EditableRowProps) {
       ) : (
         <div style={{
           fontFamily: 'var(--font-mono)', fontSize: '11px',
-          color: value ? 'var(--accent-green)' : 'var(--text-muted)',
+          color: value ? 'var(--accent-green)' : 'var(--text-secondary)',
           background: 'var(--bg-primary)', padding: '4px 8px', borderRadius: '3px',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%'
         }}>
@@ -165,12 +170,12 @@ function ApiKeyStatusRow() {
       <div style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 600, color: 'var(--text-info)' }}>
         apiKey
       </div>
-      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+      <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
         Read-only — an API key is per-provider. Edit in Settings.
       </div>
       <div style={{
         fontFamily: 'var(--font-mono)', fontSize: '11px',
-        color: configured.length > 0 ? 'var(--accent-green)' : 'var(--text-muted)',
+        color: configured.length > 0 ? 'var(--accent-green)' : 'var(--text-secondary)',
         background: 'var(--bg-primary)', padding: '4px 8px', borderRadius: '3px',
       }}>
         {configured.length > 0 ? `Configured: ${configured.join(', ')}` : '— not set —'}
@@ -185,7 +190,7 @@ export default function VariablesTab() {
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <Globe size={14} style={{ color: 'var(--accent-blue)' }} />
         <h3 style={{ fontSize: '14px', fontWeight: 600 }}>Global Variables</h3>
-        <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: 'auto' }}>{GLOBAL_VARIABLES.length + 1} variables</span>
+        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginLeft: 'auto' }}>{GLOBAL_VARIABLES.length + 1} variables</span>
       </div>
       <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
         Variables shared across all agents. Values are read from localStorage and sent to the backend on each migration start.

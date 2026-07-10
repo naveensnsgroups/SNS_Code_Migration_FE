@@ -63,11 +63,11 @@ export default function FragmentsTab() {
           </div>
           <div style={{ display: 'flex', gap: '6px' }}>
             {isCustom && !editing && (
-              <button className="list-item-delete-btn" style={{ padding: '4px', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={reset}><X size={11} /> Reset</button>
+              <button className="list-item-delete-btn" style={{ padding: '4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={reset}><X size={11} /> Reset</button>
             )}
             <button
               className="list-item-delete-btn"
-              style={{ padding: '4px', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px', color: editing ? 'var(--text-success)' : undefined }}
+              style={{ padding: '4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', color: editing ? 'var(--text-success)' : undefined }}
               onClick={() => {
                 if (editing) save();
                 else { setDraft(text); setEditing(true); }
@@ -86,7 +86,7 @@ export default function FragmentsTab() {
             style={{ width: '100%', minHeight: '120px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '11px', padding: '8px', resize: 'vertical', boxSizing: 'border-box' }}
           />
         ) : (
-          <div style={{ fontSize: '11px', color: text ? 'var(--text-secondary)' : 'var(--text-muted)' }}>
+          <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
             {text || '— empty, no custom rules applied —'}
           </div>
         )}

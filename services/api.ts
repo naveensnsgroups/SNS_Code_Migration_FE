@@ -1,6 +1,6 @@
 // Central API communication layer — pure typed fetch wrappers, no business logic, no hardcoded URLs.
 
-import type { DetectedStack, FileNode, TargetStack, MigrationTaskEntry, RuleCoverageEntry } from '@/types';
+import type { DetectedStack, FileNode, TargetStack, MigrationTaskEntry, RuleCoverageEntry, GraphResolutionSummary } from '@/types';
 
 // ── Response Types ────────────────────────────────────────────────────────────
 
@@ -202,6 +202,7 @@ export interface SessionStateResponse {
   currentFile: string;
   migrationTaskList: MigrationTaskEntry[] | null;
   ruleCoverageReport: RuleCoverageEntry[] | null;
+  graphResolutionSummary: GraphResolutionSummary | null;
 }
 
 // Used on page load to recover an in-progress or completed session after a refresh.
@@ -214,6 +215,45 @@ export async function fetchSessionState(
   );
   if (!res.ok) throw new Error('Failed to load session state');
   return res.json() as Promise<SessionStateResponse>;
+}
+
+// HITL graph-review checkpoint — fetch the graph-resolution summary the user reviews.
+export async function fetchGraphSummary(
+  backendUrl: string,
+  sessionId: string
+): Promise<GraphResolutionSummary | null> {
+  const res = await fetch(`${backendUrl}/api/migrate/graph-summary?sessionId=${sessionId}`);
+  if (!res.ok) throw new Error('Failed to load graph summary');
+  const data = await res.json() as { graphResolutionSummary: GraphResolutionSummary | null };
+  return data.graphResolutionSummary;
+}
+
+// HITL — Continue: resume Stage 1 into report writing from the checkpoint.
+export async function continueAnalysis(
+  backendUrl: string,
+  sessionId: string,
+  apiKey: string,
+  apiKeys: Record<string, string>
+): Promise<void> {
+  const res = await fetch(`${backendUrl}/api/migrate/continue-analysis`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, apiKey, apiKeys }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+// HITL — Skip: forfeit the report and unlock Stage 2 code migration.
+export async function skipToStage2(
+  backendUrl: string,
+  sessionId: string
+): Promise<void> {
+  const res = await fetch(`${backendUrl}/api/migrate/skip-to-stage2`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId }),
+  });
+  if (!res.ok) throw new Error(await res.text());
 }
 
 // ── Config API — Real Agent + Tool Registry ───────────────────────────────────

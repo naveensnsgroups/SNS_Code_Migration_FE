@@ -7,6 +7,9 @@ export type MigrationStatus =
   | 'discovery'
   | 'file-analysis'
   | 'graph-resolution'
+  // HITL checkpoint: pipeline halts after graph-resolution for the user to review
+  // the graphs and choose Continue (report) or Skip (code migration).
+  | 'awaiting-graph-review'
   | 'section-writing'
   | 'assembly'
   | 'migration-planning'
@@ -16,6 +19,14 @@ export type MigrationStatus =
   | 'complete'
   | 'error'
   | 'paused';
+
+// Real per-run graph-resolution result the user reviews at the HITL checkpoint.
+// Mirrors the backend GraphResolutionSummary (session/types.ts).
+export interface GraphResolutionSummary {
+  counters: Record<string, number>;
+  primaryGraphsEmpty: boolean;
+  generatedAt: string;
+}
 
 // 'stream' = a raw streamed chunk of model reasoning text, not a real severity level.
 export type LogLevel = 'info' | 'success' | 'error' | 'warning' | 'command' | 'stream';

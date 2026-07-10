@@ -44,7 +44,7 @@ function SectionBlock({ icon, title, children }: { icon: React.ReactNode; title:
 
 export default function AgentsTab({ agents, selectedAgentId, modelOptions, onSelectAgent, onToggleAgent, onUpdateModel }: Props) {
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || agents[0];
-  if (!selectedAgent) return <div style={{ padding: '20px', color: 'var(--text-muted)', fontSize: '12px' }}>No agents loaded.</div>;
+  if (!selectedAgent) return <div style={{ padding: '20px', color: 'var(--text-secondary)', fontSize: '12px' }}>No agents loaded.</div>;
 
   return (
     <div className="config-agents-grid">
@@ -73,7 +73,7 @@ export default function AgentsTab({ agents, selectedAgentId, modelOptions, onSel
         <div className="agent-details-header">
           <div>
             <h3 className="agent-details-title">{selectedAgent.name}</h3>
-            <div className="agent-details-id" style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+            <div className="agent-details-id" style={{ fontFamily: 'var(--font-mono)', fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
               Id: {selectedAgent.id}
             </div>
           </div>
@@ -129,7 +129,7 @@ export default function AgentsTab({ agents, selectedAgentId, modelOptions, onSel
                 <ExternalLink size={11} />
               </button>
             </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
               Edit prompt content in the <strong>Prompt Fragments</strong> tab
             </div>
           </div>
@@ -143,7 +143,7 @@ export default function AgentsTab({ agents, selectedAgentId, modelOptions, onSel
               background: 'var(--bg-primary)', border: '1px solid var(--border-color)',
               borderRadius: '4px', padding: '8px 10px', marginBottom: '6px'
             }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px' }}>Backend alias (from agent-definitions.ts):</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Backend alias (from agent-definitions.ts):</div>
               <code style={{ fontSize: '12px', color: 'var(--text-info)', fontFamily: 'var(--font-mono)' }}>
                 {selectedAgent.selectedModel || 'Not set'}
               </code>
@@ -158,7 +158,7 @@ export default function AgentsTab({ agents, selectedAgentId, modelOptions, onSel
               <option value="">— Use alias default —</option>
               {modelOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
             </select>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
               Alias → model mapping configured in <strong>Model Aliases</strong> tab
             </div>
           </div>
@@ -205,7 +205,7 @@ export default function AgentsTab({ agents, selectedAgentId, modelOptions, onSel
 
         {/* ── Agent Tags ─────────────────────────────────────────────────── */}
         {selectedAgent.functions.length === 0 && selectedAgent.variables.length === 0 && (
-          <div style={{ marginTop: '20px', fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
+          <div style={{ marginTop: '20px', fontSize: '12px', color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>
             No variables or functions configured for this agent.
           </div>
         )}

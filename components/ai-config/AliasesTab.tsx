@@ -35,7 +35,7 @@ export default function AliasesTab({ aliases, modelOptions, onAliasChange }: Pro
           return (
             <div key={alias.key} className="form-group">
               <label className="form-label">{alias.label}</label>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>{alias.desc}</div>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginBottom: '4px' }}>{alias.desc}</div>
               <select className="form-select-premium" value={currentValue} onChange={e => onAliasChange(alias.key, e.target.value)}>
                 {options.length === 0 && <option value="">No models configured — add some in Settings</option>}
                 {options.map(model => (

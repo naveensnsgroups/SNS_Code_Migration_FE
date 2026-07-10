@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Activity } from 'lucide-react';
-import type { DetectedStack, MigrationStatus, MigrationPhase, TargetStack, AIProvider, MigrationTaskEntry, RuleCoverageEntry } from '@/types';
+import type { DetectedStack, MigrationStatus, MigrationPhase, TargetStack, AIProvider, MigrationTaskEntry, RuleCoverageEntry, GraphResolutionSummary } from '@/types';
 import type { LogEntry } from '@/types';
 
 import { readSettings } from '@/hooks/useSettings';
@@ -16,6 +16,7 @@ import TargetConfig       from '@/components/ai-panel/TargetConfig';
 import PipelineProgress   from '@/components/ai-panel/PipelineProgress';
 import ActionButtons      from '@/components/ai-panel/ActionButtons';
 import MigrationTaskList  from '@/components/ai-panel/MigrationTaskList';
+import GraphReviewCheckpoint from '@/components/ai-panel/GraphReviewCheckpoint';
 import LiveStatusOverlay  from '@/components/live-status/LiveStatusOverlay';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -34,6 +35,11 @@ interface Props {
   onStart:          (target: TargetStack) => void;
   onStop:           () => void;
   onPause:          () => void;
+  // HITL graph-review checkpoint (status 'awaiting-graph-review')
+  graphResolutionSummary?: GraphResolutionSummary | null;
+  isCheckpointBusy?: boolean;
+  onContinueAnalysis?: () => void;
+  onSkipToStage2?:     () => void;
   settingsTrigger?: number;
   onSettingsSaved?: () => void;
   width?:           number;
@@ -69,6 +75,7 @@ export default function AIPanel({
   detectedStack, status, phases, progress, currentFile,
   logs, hasProject, activeTool, toolCallHistory,
   onStart, onStop, onPause,
+  graphResolutionSummary, isCheckpointBusy, onContinueAnalysis, onSkipToStage2,
   settingsTrigger = 0, onSettingsSaved, width,
   migrationTaskList, ruleCoverageReport, isPlanning, onStartMigration,
   isGenerating, onStartGeneration,
@@ -88,8 +95,18 @@ export default function AIPanel({
   // ── Derived flags ──────────────────────────────────────────────────────────
   const isRunning     = ['scanning', 'planning'].includes(status);
   const isComplete    = status === 'complete';
-  // Gates showing TargetConfig — target framework/db/lang selection needs detectedStack.
+  // Gates the Stage-2 "Start Code Migration" button in ActionButtons.
   const scanPhaseDone = phases.find(p => p.id === 'scan')?.status === 'done';
+
+  // Target Configuration (framework/database/language/test) is a Stage-2 concern
+  // only — Stage-1 analysis never reads those 4 fields (resolveStreamingProvider
+  // uses only provider+model), and Stage 2's /plan takes its own fresh targetStack.
+  // So the panel appears only once code migration is the actual next step —
+  // after Stage-1 analysis completes, or while any Stage-2 sub-stage is active —
+  // never before/during analysis.
+  const codeMigrationRelevant =
+    isComplete || isPlanning || isGenerating || isVerifying ||
+    (!!migrationTaskList && migrationTaskList.length > 0);
 
   // ── Live Status Overlay toggle (manual only) ───────────────────────────
   const [liveOpen, setLiveOpen] = useState(false);
@@ -257,8 +274,9 @@ export default function AIPanel({
             {/* Detected Stack */}
             <StackBadge detectedStack={detectedStack} />
 
-            {/* Target Config — free-text inputs, visible after Stage-1 plan */}
-            {detectedStack && scanPhaseDone && (
+            {/* Target Config — Stage-2 only; shown once code migration is the next
+                step, not before/during Stage-1 analysis. See codeMigrationRelevant. */}
+            {detectedStack && codeMigrationRelevant && (
               <TargetConfig
                 detectedStack={detectedStack}
                 targetFramework={targetFramework}
@@ -281,6 +299,16 @@ export default function AIPanel({
               isRunning={isRunning}
               isComplete={isComplete}
             />
+
+            {/* HITL graph-review checkpoint — after Graph Resolution */}
+            {status === 'awaiting-graph-review' && (
+              <GraphReviewCheckpoint
+                summary={graphResolutionSummary ?? null}
+                isBusy={!!isCheckpointBusy}
+                onContinue={() => onContinueAnalysis?.()}
+                onSkip={() => onSkipToStage2?.()}
+              />
+            )}
 
             {/* Action Buttons */}
             <ActionButtons

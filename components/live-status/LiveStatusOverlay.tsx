@@ -4,7 +4,7 @@
 'use client';
 
 import { memo } from 'react';
-import { Loader2, AlertTriangle, AlertCircle, X, Activity, Check } from 'lucide-react';
+import { Loader2, AlertTriangle, AlertCircle, X, Activity, Check, UserCheck } from 'lucide-react';
 import type { MigrationStatus, MigrationPhase } from '@/types';
 import type { LiveStatusData } from './types';
 
@@ -25,6 +25,7 @@ const STATUS_TEXT: Record<MigrationStatus, string> = {
   discovery:            'Discovery',
   'file-analysis':      'File Analysis',
   'graph-resolution':   'Graph Resolution',
+  'awaiting-graph-review': 'Awaiting Review',
   'section-writing':    'Writing Sections',
   assembly:             'Assembly',
   'migration-planning': 'Migration Planning',
@@ -43,6 +44,9 @@ const DOT_CLASS: Record<MigrationStatus, string> = {
   discovery:            'ls-overlay__dot--running',
   'file-analysis':      'ls-overlay__dot--running',
   'graph-resolution':   'ls-overlay__dot--running',
+  // Distinct from 'paused' (--paused is amber, for "you clicked Pause") — this is
+  // a HITL checkpoint waiting on a decision from you, not a run you stopped.
+  'awaiting-graph-review': 'ls-overlay__dot--review',
   'section-writing':    'ls-overlay__dot--running',
   assembly:             'ls-overlay__dot--running',
   'migration-planning': 'ls-overlay__dot--running',
@@ -61,6 +65,7 @@ const BADGE_CLASS: Record<MigrationStatus, string> = {
   discovery:            'ls-overlay__badge--running',
   'file-analysis':      'ls-overlay__badge--running',
   'graph-resolution':   'ls-overlay__badge--running',
+  'awaiting-graph-review': 'ls-overlay__badge--review',
   'section-writing':    'ls-overlay__badge--running',
   assembly:             'ls-overlay__badge--running',
   'migration-planning': 'ls-overlay__badge--running',
@@ -146,14 +151,22 @@ export default function LiveStatusOverlay({ data, status, phases, isRunning, onC
   } = data;
 
   // Fix: if status says idle but realPct > 0 and < 100, there's active work
-  // (happens when status state lags behind SSE progress events)
+  // (happens when status state lags behind SSE progress events).
+  //
+  // Must check `status === 'idle'` literally, NOT `!isRunning` as a stand-in for
+  // it — isRunning is also false during legitimate non-running-but-meaningful
+  // statuses like 'awaiting-graph-review' (a HITL checkpoint, paused on purpose)
+  // or 'complete'/'error'/'paused'. Using !isRunning here previously forced ALL
+  // of those into 'planning' ("Running") the moment realPct held a stale 0-100
+  // value, masking the real "Awaiting Review" status and falsely showing an
+  // "Active Tool: Generating response…" section while the pipeline sat idle.
   const effectiveStatus: MigrationStatus =
-    (!isRunning && realPct > 0 && realPct < 100) ? 'planning' : status;
+    (status === 'idle' && realPct > 0 && realPct < 100) ? 'planning' : status;
 
   const dotClass   = DOT_CLASS[effectiveStatus]   ?? DOT_CLASS.idle;
   const badgeClass = BADGE_CLASS[effectiveStatus] ?? BADGE_CLASS.idle;
   const statusText = STATUS_TEXT[effectiveStatus] ?? 'Ready';
-  const effectiveRunning = isRunning || (realPct > 0 && realPct < 100);
+  const effectiveRunning = isRunning || (status === 'idle' && realPct > 0 && realPct < 100);
 
   return (
     <div className="ls-overlay">
@@ -173,7 +186,9 @@ export default function LiveStatusOverlay({ data, status, phases, isRunning, onC
       <div className="ls-overlay__section">
         <div className="ls-overlay__status-row">
           <span className={`ls-overlay__badge ${badgeClass}`}>
-            <span className={`ls-overlay__dot ${dotClass}`} />
+            {effectiveStatus === 'awaiting-graph-review'
+              ? <UserCheck size={12} className="ls-overlay__review-icon" />
+              : <span className={`ls-overlay__dot ${dotClass}`} />}
             {statusText}
           </span>
           {realPct >= 0 && (

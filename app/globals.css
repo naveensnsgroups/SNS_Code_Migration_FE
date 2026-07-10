@@ -149,23 +149,65 @@ body {
 
 /* ── Title Bar ─────────────────────────────────────────────────────────── */
 .title-bar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 30px;
+  height: 34px;
+  /* Solid fallback first, then a subtle top-lit gradient for depth on browsers
+     that support color-mix (falls back gracefully otherwise). */
   background: var(--bg-activity);
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--bg-activity) 92%, #ffffff) 0%,
+    var(--bg-activity) 100%);
   border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
   padding: 0 12px;
   flex-shrink: 0;
   user-select: none;
 }
+/* Thin brand accent hairline along the bottom edge */
+.title-bar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg,
+    var(--accent-blue) 0%,
+    var(--accent-green) 45%,
+    transparent 80%);
+  opacity: 0.6;
+  pointer-events: none;
+}
 .title-bar__logo {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 600;
+  gap: 9px;
+}
+.title-bar__logo-img {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  filter: drop-shadow(0 0 6px rgba(0, 122, 204, 0.35));
+}
+/* Two-tone wordmark: strong product name + lighter descriptor */
+.title-bar__brand {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+.title-bar__brand-strong {
+  font-weight: 700;
   color: var(--activity-fg);
+}
+.title-bar__brand-light {
+  font-weight: 400;
+  color: var(--activity-fg-inactive);
 }
 .title-bar__logo-icon { color: var(--accent-blue); font-size: 16px; }
 .title-bar__actions { display: flex; align-items: center; gap: 6px; }
@@ -394,8 +436,8 @@ body {
   max-width: 160px;
 }
 .theia-welcome-dropzone {
-  font-size: 11px;
-  color: var(--text-muted);
+  font-size: 11.5px;
+  color: var(--text-secondary);
   margin-top: 6px;
   padding: 20px 10px;
   border: 1px dashed var(--border-color);
@@ -817,14 +859,15 @@ body {
 .ls-overlay__badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
+  gap: 6px;
+  font-size: 12.5px;
   font-family: var(--font-mono);
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 .ls-overlay__dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -838,27 +881,43 @@ body {
 .ls-overlay__badge--scanning { color: var(--accent-blue); }
 .ls-overlay__badge--complete { color: var(--text-success); }
 .ls-overlay__badge--error    { color: var(--text-error); }
-.ls-overlay__badge--idle     { color: var(--text-muted); }
+.ls-overlay__badge--idle     { color: var(--text-secondary); }
 .ls-overlay__badge--paused   { color: var(--text-warning); }
+
+/* HITL checkpoint ("Awaiting Review") — deliberately distinct from --paused
+   (amber = "you clicked Pause"). Violet signals "waiting on a decision from
+   you", and the icon pulses rather than sitting static, drawing the eye the
+   same way a real notification badge would. */
+.ls-overlay__badge--review { color: var(--accent-purple); }
+.ls-overlay__review-icon {
+  color: var(--accent-purple);
+  flex-shrink: 0;
+  animation: ls-review-pulse 1.6s ease-in-out infinite;
+}
+@keyframes ls-review-pulse {
+  0%, 100% { opacity: 1;    transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(0.9); }
+}
 .ls-overlay__pct {
-  font-size: 11px;
+  font-size: 12.5px;
   font-family: var(--font-mono);
-  color: var(--text-muted);
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 /* Progress bar */
 .ls-overlay__progress-label {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 11px;
   font-family: var(--font-mono);
-  color: var(--text-muted);
-  margin-bottom: 4px;
+  color: var(--text-secondary);
+  margin-bottom: 5px;
 }
 .ls-overlay__progress-track {
-  height: 3px;
+  height: 5px;
   background: var(--bg-tertiary);
-  border-radius: 2px;
+  border-radius: 3px;
   overflow: hidden;
 }
 .ls-overlay__progress-fill {
@@ -901,40 +960,50 @@ body {
   z-index: 1;
 }
 .ls-overlay__step-line {
-  width: 1px;
+  width: 2px;
   flex: 1;
-  min-height: 8px;
+  min-height: 10px;
   background: var(--border-color);
   margin: 1px 0;
+  border-radius: 1px;
 }
 /* A completed step's connector is green — draws the "path travelled" */
 .ls-overlay__step--done .ls-overlay__step-line {
   background: var(--text-success);
 }
+/* The line leading out of the active step gets a subtle animated pulse */
+.ls-overlay__step--active .ls-overlay__step-line {
+  background: linear-gradient(var(--accent-blue), var(--border-color));
+}
 .ls-overlay__step-label {
-  font-size: 11px;
+  font-size: 12px;
   font-family: var(--font-mono);
-  line-height: 16px;
-  padding-bottom: 8px;
-  color: var(--text-muted);
+  line-height: 18px;
+  padding-bottom: 10px;
+  color: var(--text-secondary);
 }
 /* Pending step: hollow dot */
 .ls-overlay__step-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  border: 1.5px solid var(--text-muted);
+  border: 1.5px solid var(--text-secondary);
   box-sizing: border-box;
 }
 .ls-overlay__step--done   .ls-overlay__step-icon { color: var(--text-success); }
 .ls-overlay__step--active .ls-overlay__step-icon { color: var(--accent-blue); }
 .ls-overlay__step--error  .ls-overlay__step-icon { color: var(--text-error); }
-.ls-overlay__step--done   .ls-overlay__step-label { color: var(--text-secondary); }
+.ls-overlay__step--done   .ls-overlay__step-label { color: var(--text-primary); }
 .ls-overlay__step--active .ls-overlay__step-label {
   color: var(--text-primary);
+  font-weight: 700;
+}
+.ls-overlay__step--error  .ls-overlay__step-label {
+  color: var(--text-error);
   font-weight: 600;
 }
-.ls-overlay__step--error  .ls-overlay__step-label { color: var(--text-error); }
+/* Pending labels stay readable (secondary, not muted) but lighter weight */
+.ls-overlay__step--pending .ls-overlay__step-label { color: var(--text-secondary); }
 
 /* Active Tool */
 .ls-overlay__tool {
@@ -956,24 +1025,30 @@ body {
   font-weight: 500;
 }
 .ls-overlay__tool-args {
-  font-size: 10px;
+  font-size: 10.5px;
   font-family: var(--font-mono);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Thinking state — shown when running but no tool executing (LLM generating) */
+/* Thinking state — shown when running but no tool executing (LLM generating).
+   Gently pulses so it's clearly "working", not stalled. */
 .ls-overlay__thinking {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-family: var(--font-mono);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-style: italic;
-  padding: 4px 2px;
+  padding: 5px 2px;
+  animation: ls-thinking-pulse 1.6s ease-in-out infinite;
+}
+@keyframes ls-thinking-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
 }
 
 
@@ -981,16 +1056,16 @@ body {
 .ls-overlay__rows { display: flex; flex-direction: column; gap: 4px; }
 .ls-overlay__row  { display: flex; align-items: baseline; gap: 6px; }
 .ls-overlay__key  {
-  font-size: 9.5px;
+  font-size: 10px;
   font-family: var(--font-mono);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   min-width: 44px;
   flex-shrink: 0;
 }
 .ls-overlay__val {
-  font-size: 11px;
+  font-size: 11.5px;
   font-family: var(--font-mono);
   color: var(--text-primary);
   overflow: hidden;
@@ -1557,14 +1632,15 @@ body {
   border: 1px solid var(--border-subtle);
 }
 .badge-pill__label {
-  font-size: 9px;
-  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  margin-bottom: 2px;
+  letter-spacing: 0.04em;
+  margin-bottom: 3px;
 }
 .badge-pill__value {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   font-family: var(--font-mono);
   overflow: hidden;
@@ -1796,8 +1872,12 @@ body {
   font-weight: 500;
 }
 .phase-item-premium.done .phase-item-label-text { color: var(--text-success); }
-.phase-item-premium.active .phase-item-label-text { color: var(--text-white); font-weight: 600; }
-.phase-item-premium.pending .phase-item-label-text { color: var(--text-muted); }
+/* Was pinned to var(--text-white) — invisible in light theme, since the active
+   row's background is just a translucent blue tint over the page's own (light)
+   background, not a solid dark surface. Use the always-adaptive primary token;
+   the blue border/glow/spinner already signal "active" without forcing the text. */
+.phase-item-premium.active .phase-item-label-text { color: var(--text-primary); font-weight: 600; }
+.phase-item-premium.pending .phase-item-label-text { color: var(--text-secondary); }
 
 .spin {
   animation: spin 2s linear infinite;
@@ -2085,15 +2165,29 @@ body {
   max-width: 800px;
 }
 .field-block__breadcrumb {
-  font-size: 10px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  font-size: 11.5px;
   font-family: var(--font-mono);
+  margin-bottom: 5px;
+}
+.field-block__crumb {
+  color: var(--text-secondary);
+}
+.field-block__crumb-sep {
+  color: var(--text-muted);
+}
+/* The actual setting name — the thing you scanned for, made prominent */
+.field-block__crumb-current {
   color: var(--text-info);
-  opacity: 0.8;
+  font-weight: 600;
 }
 .field-block__description {
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.5;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  line-height: 1.55;
 }
 .field-block__input-area {
   margin-top: 4px;
@@ -2307,9 +2401,9 @@ body {
   color: var(--text-primary);
 }
 .agent-details-id {
-  font-size: 10px;
+  font-size: 11.5px;
   font-family: var(--font-mono);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   margin-top: 2px;
 }
 .agent-toggles-container {

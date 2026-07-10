@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { X, Sparkles, Download } from 'lucide-react';
+import { X, Download } from 'lucide-react';
 import { getFileIcon } from '../utils/labelProvider';
 import MonacoCodeBlock from './MonacoCodeBlock';
 
@@ -96,9 +96,8 @@ export default function CodeViewer({ legacyCode, modernCode, legacyFile, modernF
         )}
         {modernFile && modernCode !== null && (
           <div className="editor-tab active" style={{ borderTopColor: 'var(--text-success)' }}>
-            <span className="editor-tab__icon" style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+            <span className="editor-tab__icon">
               {getFileIcon(modernFile)}
-              <Sparkles size={10} style={{ color: 'var(--text-success)' }} />
             </span>
             <span className="editor-tab__name">{modernFile.split('/').pop() ?? modernFile} <span style={{ color: 'var(--text-success)', fontSize: '10px' }}>Modern</span></span>
             {onClose && (

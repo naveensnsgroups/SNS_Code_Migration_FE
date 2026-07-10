@@ -184,7 +184,7 @@ export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, on
                 >
                   Open Folder
                 </button>
-                <p style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px', maxWidth: '200px' }}>
+                <p style={{ fontSize: '11px', lineHeight: '1.4', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '210px' }}>
                   Your browser will ask you to confirm folder access — click Upload to continue.
                 </p>
               </>

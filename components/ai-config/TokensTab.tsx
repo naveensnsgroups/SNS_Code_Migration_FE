@@ -122,7 +122,7 @@ function RateEditorCell({
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-      <span style={{ color: cost !== null ? 'var(--text-secondary)' : 'var(--text-muted)' }}>
+      <span style={{ color: 'var(--text-secondary)' }}>
         {formatCost(cost)}
       </span>
       <button
@@ -183,7 +183,7 @@ export default function TokensTab({
     return (
       <div style={{
         padding: '24px',
-        color: 'var(--text-muted)',
+        color: 'var(--text-secondary)',
         fontSize: '13px',
         textAlign: 'center',
         background: 'var(--bg-primary)',
@@ -386,7 +386,7 @@ export default function TokensTab({
         alignItems: 'center',
         gap: '8px',
         fontSize: '12px',
-        color: 'var(--text-muted)',
+        color: 'var(--text-secondary)',
         border: '1px solid var(--border-color)',
       }}>
         <svg
@@ -394,7 +394,7 @@ export default function TokensTab({
           width="14"
           height="14"
           fill="currentColor"
-          style={{ flexShrink: 0, color: 'var(--text-muted)' }}
+          style={{ flexShrink: 0, color: 'var(--text-secondary)' }}
         >
           <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0-1A6 6 0 1 0 8 2a6 6 0 0 0 0 12zM7.5 7.5a.5.5 0 0 1 1 0v4a.5.5 0 0 1-1 0v-4zm.5-2a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5z" />
         </svg>

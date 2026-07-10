@@ -25,6 +25,7 @@ const STATUS_LABEL: Record<MigrationStatus, string> = {
   discovery:            'Discovery...',
   'file-analysis':      'File Analysis...',
   'graph-resolution':   'Graph Resolution...',
+  'awaiting-graph-review': 'Awaiting Graph Review',
   'section-writing':    'Writing Sections...',
   assembly:             'Assembly...',
   'migration-planning': 'Planning Migration...',
@@ -67,7 +68,9 @@ export default function HomePage() {
     tokenUsage, isRunning, hasProject,
     activeTool, toolCallHistory,
     migrationTaskList, ruleCoverageReport, isPlanning, isGenerating, isVerifying,
-    handleUpload, handleStart, handleStartMigrationPlanning, handleStartCodeGeneration,
+    graphResolutionSummary, isCheckpointBusy,
+    handleUpload, handleStart, handleContinueAnalysis, handleSkipToStage2,
+    handleStartMigrationPlanning, handleStartCodeGeneration,
     handleStartVerification,
     handleStop, handlePause, handleSelectFile, clearSelectedFile,
     handleDownload,
@@ -125,9 +128,12 @@ export default function HomePage() {
 
       {/* Title Bar */}
       <header className="title-bar">
-        <div className="title-bar__logo" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <img src="/agent_workbench_logo.png" alt="Logo" style={{ width: '18px', height: '18px' }} />
-          <span>Code Migration Platform</span>
+        <div className="title-bar__logo">
+          <img src="/agent_workbench_logo.png" alt="Logo" className="title-bar__logo-img" />
+          <span className="title-bar__brand">
+            <span className="title-bar__brand-strong">Code Migration</span>
+            <span className="title-bar__brand-light">Platform</span>
+          </span>
         </div>
         <div className="title-bar__actions">
           {sessionId && (
@@ -238,6 +244,10 @@ export default function HomePage() {
               onStart={handleStart}
               onStop={handleStop}
               onPause={handlePause}
+              graphResolutionSummary={graphResolutionSummary}
+              isCheckpointBusy={isCheckpointBusy}
+              onContinueAnalysis={handleContinueAnalysis}
+              onSkipToStage2={handleSkipToStage2}
               settingsTrigger={settingsTrigger}
               onSettingsSaved={handleSettingsSaved}
               width={aiPanelWidth}
