@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Activity } from 'lucide-react';
+import { Activity, CheckCircle2, ArrowDown } from 'lucide-react';
 import type { DetectedStack, MigrationStatus, MigrationPhase, TargetStack, AIProvider, MigrationTaskEntry, RuleCoverageEntry, GraphResolutionSummary } from '@/types';
 import type { LogEntry } from '@/types';
 
@@ -40,6 +40,11 @@ interface Props {
   isCheckpointBusy?: boolean;
   onContinueAnalysis?: () => void;
   onSkipToStage2?:     () => void;
+  // Live-panel time awareness + manual reconnect
+  lastEventAt?:  number | null;
+  runStartedAt?: number | null;
+  phaseDurations?: Record<string, number>;
+  onReconnect?:  () => void;
   settingsTrigger?: number;
   onSettingsSaved?: () => void;
   width?:           number;
@@ -76,6 +81,7 @@ export default function AIPanel({
   logs, hasProject, activeTool, toolCallHistory,
   onStart, onStop, onPause,
   graphResolutionSummary, isCheckpointBusy, onContinueAnalysis, onSkipToStage2,
+  lastEventAt = null, runStartedAt = null, phaseDurations = {}, onReconnect,
   settingsTrigger = 0, onSettingsSaved, width,
   migrationTaskList, ruleCoverageReport, isPlanning, onStartMigration,
   isGenerating, onStartGeneration,
@@ -107,6 +113,22 @@ export default function AIPanel({
   const codeMigrationRelevant =
     isComplete || isPlanning || isGenerating || isVerifying ||
     (!!migrationTaskList && migrationTaskList.length > 0);
+
+  // Stage-honesty: a phase can show a clean "done" checkmark while having
+  // produced hollow output. graphResolutionSummary.primaryGraphsEmpty is real
+  // data that previously only surfaced inside the Graph Review checkpoint card —
+  // never in the Pipeline stepper you actually watch throughout the run. Now it
+  // does, via a distinct warning icon instead of a plain green check.
+  const stageWarnings: Record<string, string> = {};
+  if (graphResolutionSummary?.primaryGraphsEmpty) {
+    stageWarnings['graph-resolution'] =
+      'Resolved graphs (symbol / entity / api) are empty — see Graph Review before continuing.';
+  }
+
+  // Stage 1 finished, Stage 2 not started yet — a human checkpoint: review the
+  // analysis, configure the target below, then start code migration.
+  const stage1Checkpoint =
+    isComplete && (!migrationTaskList || migrationTaskList.length === 0);
 
   // ── Live Status Overlay toggle (manual only) ───────────────────────────
   const [liveOpen, setLiveOpen] = useState(false);
@@ -268,11 +290,36 @@ export default function AIPanel({
             phases={phases}
             isRunning={isRunning}
             onClose={() => setLiveOpen(false)}
+            lastEventAt={lastEventAt}
+            runStartedAt={runStartedAt}
+            phaseDurations={phaseDurations}
+            onReconnect={onReconnect}
+            stageWarnings={stageWarnings}
           />
         ) : (
           <>
             {/* Detected Stack */}
             <StackBadge detectedStack={detectedStack} />
+
+            {/* Stage 1 → Stage 2 human checkpoint banner: makes it explicit that
+                the run isn't "done" — it's the user's turn to review + configure
+                + start code migration. Sits above Target Config so the order of
+                next steps reads top-to-bottom. */}
+            {stage1Checkpoint && (
+              <div className="stage1-checkpoint">
+                <div className="stage1-checkpoint__head">
+                  <CheckCircle2 size={15} style={{ color: 'var(--text-success)', flexShrink: 0 }} />
+                  <span>Stage 1 Analysis complete</span>
+                </div>
+                <p className="stage1-checkpoint__body">
+                  Review <code>Stage1_Analysis.md</code> in the output workspace, then configure your
+                  target below and start code migration.
+                </p>
+                <div className="stage1-checkpoint__next">
+                  <ArrowDown size={11} /> Next: set Target Configuration
+                </div>
+              </div>
+            )}
 
             {/* Target Config — Stage-2 only; shown once code migration is the next
                 step, not before/during Stage-1 analysis. See codeMigrationRelevant. */}
@@ -291,13 +338,11 @@ export default function AIPanel({
               />
             )}
 
-            {/* Live progress + phase badges */}
+            {/* Live progress bar — stage-by-stage breakdown lives in Live Activity only */}
             <PipelineProgress
-              phases={phases}
               progress={progress}
               currentFile={currentFile}
               isRunning={isRunning}
-              isComplete={isComplete}
             />
 
             {/* HITL graph-review checkpoint — after Graph Resolution */}

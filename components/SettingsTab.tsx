@@ -211,6 +211,14 @@ const SETTING_FIELDS: SettingField[] = [
     defaultValue: '',
   },
   {
+    id: 'general_desktop_notifications',
+    category: 'General',
+    label: 'Desktop Notifications for Checkpoints',
+    description: 'Show a native OS notification when a migration reaches a checkpoint (Stage 1 complete, awaiting graph review, error) while this tab isn\'t focused. Requires browser permission.',
+    type: 'boolean',
+    defaultValue: false,
+  },
+  {
     id: 'general_theme',
     category: 'General',
     label: 'Color Theme',
@@ -243,6 +251,8 @@ function messageForField(field: SettingField, value: any): string {
       return 'Backend API service URL updated';
     case 'general_local_output_path':
       return value ? 'Output workspace path updated' : 'Output workspace path cleared';
+    case 'general_desktop_notifications':
+      return value ? 'Desktop notifications enabled' : 'Desktop notifications disabled';
   }
   if (field.type === 'password')
     return value ? `${field.category} API key saved` : `${field.category} API key cleared`;
@@ -395,6 +405,34 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
     if (current !== (focusValueRef.current[field.id] ?? '')) {
       notify({ type: 'success', message: messageForField(field, current) });
     }
+  };
+
+  // Boolean toggles. 'general_desktop_notifications' needs special handling: the
+  // browser's Notification.requestPermission() must be called synchronously from
+  // within a real click handler (a user gesture) — calling it later from an effect
+  // gets silently ignored or auto-denied by most browsers. So permission is
+  // requested right here, at the moment of the click, and the setting is only
+  // ever turned on if the user actually granted it — never left showing "on"
+  // while permission was denied.
+  const handleBooleanToggle = (field: SettingField) => {
+    const turningOn = !settings[field.id];
+
+    if (field.id === 'general_desktop_notifications' && turningOn) {
+      if (typeof Notification === 'undefined') {
+        notify({ type: 'warning', message: 'This browser does not support desktop notifications.' });
+        return;
+      }
+      Notification.requestPermission().then(permission => {
+        if (permission === 'granted') {
+          updateSetting(field.id, true, true);
+        } else {
+          notify({ type: 'warning', message: 'Desktop notifications were not enabled — permission denied.' });
+        }
+      });
+      return; // Don't flip the setting until the permission promise resolves.
+    }
+
+    updateSetting(field.id, turningOn, true);
   };
 
   return (
@@ -576,7 +614,7 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
                 {field.type === 'boolean' && (
                   <div
                     className="toggle-switch"
-                    onClick={() => updateSetting(field.id, !settings[field.id], true)}
+                    onClick={() => handleBooleanToggle(field)}
                     style={{ cursor: 'pointer' }}
                   >
                     <input 

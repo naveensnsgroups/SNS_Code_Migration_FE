@@ -4,9 +4,19 @@
 'use client';
 
 import { memo } from 'react';
-import { Loader2, AlertTriangle, AlertCircle, X, Activity, Check, UserCheck } from 'lucide-react';
+import { Loader2, AlertTriangle, AlertCircle, X, Activity, Check, UserCheck, WifiOff, RefreshCw, Clock } from 'lucide-react';
 import type { MigrationStatus, MigrationPhase } from '@/types';
 import type { LiveStatusData } from './types';
+import { useNow, formatDuration } from '@/hooks/useNow';
+
+// No update from the server (not even a heartbeat) for this long while a run is
+// supposedly active means the connection likely died silently, not that a stage
+// is just slow. The backend sends a heartbeat every 25s (routes/stream.ts) — this
+// MUST be comfortably larger than that, not equal to it. At 25s a single tick of
+// network jitter would make this fire falsely on almost every heartbeat cycle,
+// since there'd be zero margin. ~2.5x tolerates one missed/delayed heartbeat
+// before concluding the connection is actually gone.
+const STALE_CONNECTION_SECONDS = 65;
 
 // Human-readable status for screen readers.
 const STEP_STATUS_LABEL: Record<MigrationPhase['status'], string> = {
@@ -15,6 +25,10 @@ const STEP_STATUS_LABEL: Record<MigrationPhase['status'], string> = {
   error:   'failed',
   pending: 'pending',
 };
+
+// Stage-2 phases — used to tell "Stage 1 just finished, Stage 2 not started yet"
+// apart from a fully-finished run.
+const STAGE2_PHASE_IDS = ['migration-planning', 'code-generation', 'verification', 'migration-assembly'];
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
@@ -101,24 +115,36 @@ function Divider() {
 // (pending | active | done | error), giving an at-a-glance "where are we
 // in the migration" view rather than a single status word.
 //
-// Memoized: the live panel re-renders on every SSE tick (logs, tool calls),
-// but `phases` only changes on an actual stage transition — so the stepper
-// skips re-rendering on the far more frequent log updates.
-const StageStepper = memo(function StageStepper({ phases }: { phases: MigrationPhase[] }) {
+// Memoized on phases/phaseDurations/stageWarnings — NOT on the ticking clock, so
+// the live panel's once-a-second re-render (for the elapsed timer) doesn't force
+// every completed stage row to re-render too. Durations are static once a stage
+// finishes, so this stays a cheap, correct memoization boundary.
+interface StageStepperProps {
+  phases: MigrationPhase[];
+  /** Completed stage durations in ms, keyed by phase id. Absent = not timed (e.g. restored from a reload mid-stage). */
+  phaseDurations: Record<string, number>;
+  /** Real caveats for a stage that finished but produced something hollow/incomplete — see AIPanel's stageWarnings derivation. */
+  stageWarnings: Record<string, string>;
+}
+const StageStepper = memo(function StageStepper({ phases, phaseDurations, stageWarnings }: StageStepperProps) {
   return (
     <div className="ls-overlay__stepper" role="list" aria-label="Migration pipeline stages">
       {phases.map((p, i) => {
         const isLast = i === phases.length - 1;
+        const warning = p.status === 'done' ? stageWarnings[p.id] : undefined;
+        const duration = phaseDurations[p.id];
         return (
           <div
             key={p.id}
-            className={`ls-overlay__step ls-overlay__step--${p.status}`}
+            className={`ls-overlay__step ls-overlay__step--${p.status} ${warning ? 'ls-overlay__step--warning' : ''}`}
             role="listitem"
-            aria-label={`${p.label}: ${STEP_STATUS_LABEL[p.status]}`}
+            aria-label={`${p.label}: ${warning ? `completed with a caveat — ${warning}` : STEP_STATUS_LABEL[p.status]}`}
+            title={warning}
           >
             <div className="ls-overlay__step-rail" aria-hidden="true">
               <span className="ls-overlay__step-icon">
-                {p.status === 'done'    && <Check size={13} />}
+                {p.status === 'done' && warning  && <AlertTriangle size={12} />}
+                {p.status === 'done' && !warning && <Check size={13} />}
                 {p.status === 'active'  && <Loader2 size={12} className="spin" />}
                 {p.status === 'error'   && <AlertCircle size={12} />}
                 {p.status === 'pending' && <span className="ls-overlay__step-dot" />}
@@ -126,6 +152,9 @@ const StageStepper = memo(function StageStepper({ phases }: { phases: MigrationP
               {!isLast && <span className="ls-overlay__step-line" />}
             </div>
             <span className="ls-overlay__step-label">{p.label}</span>
+            {duration !== undefined && (
+              <span className="ls-overlay__step-duration">{formatDuration(duration)}</span>
+            )}
           </div>
         );
       })}
@@ -141,14 +170,31 @@ interface Props {
   phases:    MigrationPhase[];
   isRunning: boolean;
   onClose:   () => void;
+  /** Timestamp (ms) of the most recent SSE event of any kind — null before a run's first event. */
+  lastEventAt?:  number | null;
+  /** Timestamp (ms) the current run began — null until handleStart/handleUpload sets it for real. */
+  runStartedAt?: number | null;
+  /** Completed stage durations in ms, keyed by phase id. */
+  phaseDurations?: Record<string, number>;
+  /** Re-opens the SSE stream — wired to the "Reconnect" button in the connection-lost banner. */
+  onReconnect?: () => void;
+  /** Real caveats for a stage that finished but produced something hollow/incomplete. */
+  stageWarnings?: Record<string, string>;
 }
 
-export default function LiveStatusOverlay({ data, status, phases, isRunning, onClose }: Props) {
+export default function LiveStatusOverlay({
+  data, status, phases, isRunning, onClose,
+  lastEventAt = null, runStartedAt = null, phaseDurations = {}, onReconnect, stageWarnings = {},
+}: Props) {
   const {
     realPct, fileCount, currentFile,
     activeTool, currentAgent, currentStage,
     alerts, recentActivity,
   } = data;
+
+  // Ticks once a second — powers both the elapsed-run timer and the
+  // stale-connection check below. A single shared clock, not two timers.
+  const now = useNow(1000);
 
   // Fix: if status says idle but realPct > 0 and < 100, there's active work
   // (happens when status state lags behind SSE progress events).
@@ -163,10 +209,37 @@ export default function LiveStatusOverlay({ data, status, phases, isRunning, onC
   const effectiveStatus: MigrationStatus =
     (status === 'idle' && realPct > 0 && realPct < 100) ? 'planning' : status;
 
+  // Stage 1 finished but Stage 2 hasn't started — status is 'complete', yet every
+  // Stage-2 phase is still 'pending'. This is really a human checkpoint (review the
+  // analysis, configure a target, start code migration), not the end of the job —
+  // so show an "awaiting your action" state instead of a plain "Complete".
+  const stage1DoneAwaitingStage2 =
+    status === 'complete' &&
+    phases.length > 0 &&
+    phases.filter(p => STAGE2_PHASE_IDS.includes(p.id)).every(p => p.status === 'pending') &&
+    phases.some(p => STAGE2_PHASE_IDS.includes(p.id));
+
   const dotClass   = DOT_CLASS[effectiveStatus]   ?? DOT_CLASS.idle;
-  const badgeClass = BADGE_CLASS[effectiveStatus] ?? BADGE_CLASS.idle;
-  const statusText = STATUS_TEXT[effectiveStatus] ?? 'Ready';
+  const badgeClass = stage1DoneAwaitingStage2 ? 'ls-overlay__badge--review' : (BADGE_CLASS[effectiveStatus] ?? BADGE_CLASS.idle);
+  const statusText = stage1DoneAwaitingStage2 ? 'Stage 1 Complete' : (STATUS_TEXT[effectiveStatus] ?? 'Ready');
+  const showReviewIcon = effectiveStatus === 'awaiting-graph-review' || stage1DoneAwaitingStage2;
   const effectiveRunning = isRunning || (status === 'idle' && realPct > 0 && realPct < 100);
+  // Defensive: "Complete" can never coexist with anything but 100%, no matter what
+  // realPct's source data says — a completed run showing 98% reads as a bug even
+  // if it's cosmetic. Guards against any future path that leaves realPct stale.
+  const displayPct = status === 'complete' ? 100 : realPct;
+
+  // Stale-connection detection: a run that's supposedly active but hasn't sent
+  // ANY event (not even a heartbeat) in a while has likely lost its connection
+  // silently — previously indistinguishable from "a stage is just slow".
+  const secondsSinceLastEvent = lastEventAt !== null ? Math.floor((now - lastEventAt) / 1000) : null;
+  const connectionStale =
+    effectiveRunning && secondsSinceLastEvent !== null && secondsSinceLastEvent > STALE_CONNECTION_SECONDS;
+
+  // Elapsed-run timer. null while no real run has started this session (see the
+  // "not restored on reload" note at runStartedAt's source in useMigration.ts) —
+  // rendered as "not shown" rather than faked as 0s or omitted silently.
+  const elapsedMs = runStartedAt !== null ? now - runStartedAt : null;
 
   return (
     <div className="ls-overlay">
@@ -184,17 +257,52 @@ export default function LiveStatusOverlay({ data, status, phases, isRunning, onC
 
       {/* ── Status Badge + Progress ──────────────────────────────────────── */}
       <div className="ls-overlay__section">
-        <div className="ls-overlay__status-row">
+        {/* aria-live: announces status changes (Running → Awaiting Review → Complete)
+            to screen readers even when focus isn't already inside this panel. */}
+        <div className="ls-overlay__status-row" aria-live="polite" aria-atomic="true">
           <span className={`ls-overlay__badge ${badgeClass}`}>
-            {effectiveStatus === 'awaiting-graph-review'
+            {showReviewIcon
               ? <UserCheck size={12} className="ls-overlay__review-icon" />
               : <span className={`ls-overlay__dot ${dotClass}`} />}
             {statusText}
           </span>
-          {realPct >= 0 && (
-            <span className="ls-overlay__pct">{realPct}%</span>
+          {displayPct >= 0 && (
+            <span className="ls-overlay__pct">{displayPct}%</span>
           )}
         </div>
+
+        {/* Elapsed-run timer — only while there's a real start time to measure from. */}
+        {elapsedMs !== null && (elapsedMs > 0) && (
+          <div className="ls-overlay__elapsed">
+            <Clock size={11} />
+            <span>{formatDuration(elapsedMs)} elapsed</span>
+          </div>
+        )}
+
+        {/* Connection-lost banner — distinct from "a stage is just slow": no event
+            of ANY kind (not even a heartbeat) in over STALE_CONNECTION_SECONDS
+            while a run is supposedly active. Previously invisible entirely; the
+            status badge would just keep showing its last state forever. */}
+        {connectionStale && (
+          <div className="ls-overlay__conn-lost">
+            <WifiOff size={12} style={{ flexShrink: 0 }} />
+            <span className="ls-overlay__conn-lost-text">
+              No updates in {secondsSinceLastEvent}s — the live connection may have been lost.
+            </span>
+            {onReconnect && (
+              <button className="ls-overlay__reconnect-btn" onClick={onReconnect}>
+                <RefreshCw size={11} /> Reconnect
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Next-step hint at the Stage-1 → Stage-2 human checkpoint */}
+        {stage1DoneAwaitingStage2 && (
+          <div className="ls-overlay__next-step">
+            Review the analysis, then configure a target and start code migration in the panel.
+          </div>
+        )}
 
         {/* Progress bar */}
         {effectiveRunning && (
@@ -228,7 +336,7 @@ export default function LiveStatusOverlay({ data, status, phases, isRunning, onC
         <>
           <div className="ls-overlay__section">
             <SectionTitle>Pipeline</SectionTitle>
-            <StageStepper phases={phases} />
+            <StageStepper phases={phases} phaseDurations={phaseDurations} stageWarnings={stageWarnings} />
           </div>
           <Divider />
         </>

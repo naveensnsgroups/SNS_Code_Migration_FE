@@ -69,12 +69,30 @@ export default function HomePage() {
     activeTool, toolCallHistory,
     migrationTaskList, ruleCoverageReport, isPlanning, isGenerating, isVerifying,
     graphResolutionSummary, isCheckpointBusy,
+    lastEventAt, runStartedAt, phaseDurations, reconnect,
     handleUpload, handleStart, handleContinueAnalysis, handleSkipToStage2,
     handleStartMigrationPlanning, handleStartCodeGeneration,
     handleStartVerification,
     handleStop, handlePause, handleSelectFile, clearSelectedFile,
     handleDownload,
   } = useMigration(backendUrl, notify);
+
+  // Also pings a native OS notification for checkpoint-worthy transitions, so you
+  // don't have to keep the tab focused to notice one was reached. Gated on all of:
+  // the user opted in (Settings > Desktop Notifications), the browser actually
+  // granted permission (requested at opt-in time, in SettingsTab's click handler —
+  // never here, since Notification.requestPermission() needs a real user gesture),
+  // and the tab isn't currently focused (no point pinging what's already visible).
+  const notifyCheckpoint = useCallback((opts: Parameters<typeof notify>[0], nativeBody?: string) => {
+    notify(opts);
+    if (!nativeBody) return;
+    if (typeof document !== 'undefined' && !document.hidden) return;
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    let enabled = false;
+    try { enabled = JSON.parse(localStorage.getItem('setting_general_desktop_notifications') || 'false'); } catch {}
+    if (!enabled) return;
+    new Notification('Code Migration Platform', { body: nativeBody });
+  }, [notify]);
 
   // Fire notifications on status transitions (SNS IDE MessageService pattern)
   useEffect(() => {
@@ -87,10 +105,25 @@ export default function HomePage() {
         notify({ type: 'info', message: 'Stage-1 Analysis started…' });
         break;
       case 'complete':
-        notify({ type: 'success', message: 'Stage-1 Analysis complete! View Stage1_Analysis.md in Explorer.', timeout: 8000 });
+        notifyCheckpoint(
+          { type: 'success', message: 'Stage-1 Analysis complete! View Stage1_Analysis.md in Explorer.', timeout: 8000 },
+          'Stage 1 Analysis complete — review it and configure code migration.'
+        );
+        break;
+      // HITL checkpoint: the pipeline is paused waiting on YOUR decision (continue
+      // to the analysis report, or skip to code migration) — previously fired no
+      // notification of any kind, in-app or native, so reaching it was silent.
+      case 'awaiting-graph-review':
+        notifyCheckpoint(
+          { type: 'info', message: 'Graph resolution complete — review it in the Operational Panel to continue.', timeout: 8000 },
+          'Graph review checkpoint reached — your decision is needed to continue.'
+        );
         break;
       case 'error':
-        notify({ type: 'error', message: 'Pipeline error — check the Terminal for details.', persistent: true });
+        notifyCheckpoint(
+          { type: 'error', message: 'Pipeline error — check the Terminal for details.', persistent: true },
+          'Pipeline error — check the app for details.'
+        );
         break;
       case 'paused':
         notify({ type: 'warning', message: 'Migration paused. Click Resume to continue.' });
@@ -101,7 +134,7 @@ export default function HomePage() {
         }
         break;
     }
-  }, [status, notify]);
+  }, [status, notify, notifyCheckpoint]);
 
   // ── Settings saved callback ───────────────────────────────────────────────
   const handleSettingsSaved = useCallback(() => {
@@ -248,6 +281,10 @@ export default function HomePage() {
               isCheckpointBusy={isCheckpointBusy}
               onContinueAnalysis={handleContinueAnalysis}
               onSkipToStage2={handleSkipToStage2}
+              lastEventAt={lastEventAt}
+              runStartedAt={runStartedAt}
+              phaseDurations={phaseDurations}
+              onReconnect={reconnect}
               settingsTrigger={settingsTrigger}
               onSettingsSaved={handleSettingsSaved}
               width={aiPanelWidth}

@@ -56,11 +56,13 @@ export default function GraphReviewCheckpoint({ summary, isBusy, onContinue, onS
       </p>
 
       {graphsEmpty && (
+        // Neutral card + colored left-border/icon/text, not a same-hue wash — see
+        // ActionButtons.tsx's migrationDisabledReason banner for the same fix.
         <div style={{
           display: 'flex', alignItems: 'flex-start', gap: '6px',
           fontSize: '12px', color: 'var(--text-warning)',
-          background: 'rgba(204,167,0,0.08)', border: '1px solid rgba(204,167,0,0.2)',
-          borderRadius: '4px', padding: '6px 8px', marginBottom: '8px',
+          background: 'var(--bg-tertiary)', borderLeft: '3px solid var(--text-warning)',
+          borderRadius: '0 4px 4px 0', padding: '6px 10px', marginBottom: '8px',
         }}>
           <AlertTriangle size={12} style={{ flexShrink: 0, marginTop: '1px' }} />
           <span>

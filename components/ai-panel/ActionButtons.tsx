@@ -148,13 +148,16 @@ export default function ActionButtons({
           </button>
 
           {!canStartMigration && !isPlanning && migrationDisabledReason && (
+            // Neutral card + colored left-border/icon/text, not a same-hue wash —
+            // text-warning on an 8%-opacity tint of that SAME color read as murky/
+            // low-contrast even though the raw luminance ratio technically passed.
             <div style={{
-              display: 'flex', alignItems: 'center', gap: '5px',
-              fontSize: '11px', color: 'var(--text-warning)',
-              background: 'rgba(204,167,0,0.08)', border: '1px solid rgba(204,167,0,0.2)',
-              borderRadius: '4px', padding: '5px 8px'
+              display: 'flex', alignItems: 'center', gap: '6px',
+              fontSize: '11.5px', fontWeight: 600, color: 'var(--text-warning)',
+              background: 'var(--bg-tertiary)', borderLeft: '3px solid var(--text-warning)',
+              borderRadius: '0 4px 4px 0', padding: '6px 10px'
             }}>
-              <AlertTriangle size={11} />
+              <AlertTriangle size={12} style={{ flexShrink: 0 }} />
               <span>{migrationDisabledReason}</span>
             </div>
           )}

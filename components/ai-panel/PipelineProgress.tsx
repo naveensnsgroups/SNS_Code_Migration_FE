@@ -1,19 +1,7 @@
-// Live migration progress bar + phase status badges.
+// Live migration progress bar. The stage-by-stage breakdown lives exclusively in
+// the Live Activity panel (StageStepper in LiveStatusOverlay.tsx) — it was
+// duplicated here too and just added clutter/redundancy to an already-long panel.
 'use client';
-
-import { CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
-import type { MigrationPhase } from '@/types';
-
-// ── Phase icon helper ─────────────────────────────────────────────────────────
-
-function PhaseIcon({ status }: { status: MigrationPhase['status'] }) {
-  switch (status) {
-    case 'done':   return <CheckCircle2 className="phase-item__icon-svg text-success" size={14} />;
-    case 'active': return <RefreshCw    className="phase-item__icon-svg spin text-blue" size={14} />;
-    case 'error':  return <AlertCircle  className="phase-item__icon-svg text-error" size={14} />;
-    default:       return <div className="phase-item__icon-dot" />;
-  }
-}
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
 
@@ -42,41 +30,14 @@ function ProgressBar({ progress, currentFile }: ProgressBarProps) {
   );
 }
 
-// ── Phase List ────────────────────────────────────────────────────────────────
-
-function PhaseList({ phases }: { phases: MigrationPhase[] }) {
-  return (
-    <div className="ai-section">
-      <div className="ai-section__title">
-        <span>Pipeline Stages</span>
-      </div>
-      <div className="phase-list-premium">
-        {phases.map(p => (
-          <div key={p.id} className={`phase-item-premium ${p.status}`}>
-            <span className="phase-item-icon-wrapper"><PhaseIcon status={p.status} /></span>
-            <span className="phase-item-label-text">{p.label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ── Main Export ───────────────────────────────────────────────────────────────
 
 interface Props {
-  phases: MigrationPhase[];
   progress: number;
   currentFile: string;
   isRunning: boolean;
-  isComplete: boolean;
 }
 
-export default function PipelineProgress({ phases, progress, currentFile, isRunning, isComplete }: Props) {
-  return (
-    <>
-      {isRunning && <ProgressBar progress={progress} currentFile={currentFile} />}
-      {(isRunning || isComplete) && <PhaseList phases={phases} />}
-    </>
-  );
+export default function PipelineProgress({ progress, currentFile, isRunning }: Props) {
+  return isRunning ? <ProgressBar progress={progress} currentFile={currentFile} /> : null;
 }

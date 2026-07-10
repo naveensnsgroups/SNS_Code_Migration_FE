@@ -11,6 +11,7 @@ interface AgentConfig {
   hasChat: boolean;
   systemTemplate: string;
   selectedModel: string;         // The backend alias: e.g. "alias:fast-model"
+  overrideModel: string;         // Raw per-agent Override Model pick, "" if none set
   description: string;
   variables: { name: string; desc: string }[];
   functions: string[];
@@ -151,15 +152,22 @@ export default function AgentsTab({ agents, selectedAgentId, modelOptions, onSel
             <label className="form-label" style={{ marginTop: '6px' }}>Override Model (optional)</label>
             <select
               className="form-select-premium"
-              defaultValue=""
-              onChange={e => { if (e.target.value) onUpdateModel(selectedAgent.id, e.target.value); }}
+              value={selectedAgent.overrideModel}
+              onChange={e => onUpdateModel(selectedAgent.id, e.target.value)}
               disabled={!selectedAgent.enabled}
             >
               <option value="">— Use alias default —</option>
+              {/* Show the saved override even if it's fallen out of the live model list,
+                  never hide it silently (same rule AliasesTab follows). */}
+              {selectedAgent.overrideModel && !modelOptions.includes(selectedAgent.overrideModel) && (
+                <option value={selectedAgent.overrideModel}>{selectedAgent.overrideModel}</option>
+              )}
               {modelOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
             </select>
             <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-              Alias → model mapping configured in <strong>Model Aliases</strong> tab
+              {selectedAgent.overrideModel
+                ? <>This override takes priority over the <strong>Model Aliases</strong> mapping above — clear it (— Use alias default —) to go back to following the alias.</>
+                : <>Alias → model mapping configured in <strong>Model Aliases</strong> tab</>}
             </div>
           </div>
         </SectionBlock>

@@ -69,6 +69,25 @@ function markMigrated(tree: FileNode[], path: string): FileNode[] {
   });
 }
 
+// Reconciles a phases array into a self-consistent state. The backend's persisted
+// session phases can be internally inconsistent (e.g. 'discovery' left 'active'
+// while later phases are 'done', on a checkpoint-resumed Stage 1), and that stuck
+// state gets restored verbatim on page reload — showing a spinner that never stops.
+//   1. Monotonicity: every phase before the furthest-progressed one must be 'done'.
+//   2. If the whole run is 'complete', no phase may remain 'active'.
+function reconcilePhases(phases: MigrationPhase[], status: MigrationStatus): MigrationPhase[] {
+  const lastProgressedIdx = phases.reduce(
+    (last, p, i) => (p.status === 'done' || p.status === 'active') ? i : last, -1
+  );
+  let result = phases.map((p, i) =>
+    (i < lastProgressedIdx && p.status !== 'done') ? { ...p, status: 'done' as const } : p
+  );
+  if (status === 'complete') {
+    result = result.map(p => p.status === 'active' ? { ...p, status: 'done' as const } : p);
+  }
+  return result;
+}
+
 // ── Token Usage State Type ────────────────────────────────────────────────────
 
 export interface TokenUsage {
@@ -130,6 +149,11 @@ export interface UseMigrationReturn {
   // HITL graph-review checkpoint (status 'awaiting-graph-review')
   graphResolutionSummary: GraphResolutionSummary | null;
   isCheckpointBusy: boolean;
+  // Live-panel time awareness — see the state declarations below for what each means.
+  lastEventAt: number | null;
+  runStartedAt: number | null;
+  phaseDurations: Record<string, number>;
+  reconnect: () => void;
   // Handlers
   handleUpload: (files: FileList | File[], explicitPaths?: string[]) => Promise<void>;
   handleStart: (target: TargetStack) => Promise<void>;
@@ -174,6 +198,22 @@ export function useMigration(
   const [toolCallHistory, setToolCallHistory] = useState<ToolCallHistoryItem[]>([]);
   // Pending tool call staging, keyed by call id so overlapping calls don't overwrite each other.
   const pendingToolsRef = React.useRef<Map<string, { name: string; args: string }>>(new Map());
+
+  // ── Live-panel time awareness ────────────────────────────────────────────
+  // lastEventAt: timestamp of the most recent SSE event of ANY type (including
+  // heartbeats) — lets the UI tell "a stage is just slow" apart from "the SSE
+  // connection silently died", which previously looked identical.
+  const [lastEventAt, setLastEventAt] = useState<number | null>(null);
+  // runStartedAt: when the current run began — powers the elapsed-time display.
+  const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
+  // Completed per-phase durations in ms, keyed by phase id. Best-effort: timed
+  // client-side, so a page reload mid-run loses in-progress timing for that one
+  // phase (no per-phase timestamps are persisted server-side) — not faked.
+  const [phaseDurations, setPhaseDurations] = useState<Record<string, number>>({});
+  // When each currently-active phase started (ms epoch), keyed by phase id.
+  // A ref, not state — it's write-only bookkeeping for duration math, never
+  // rendered directly, so it doesn't need to trigger re-renders on its own.
+  const phaseStartedAtRef = React.useRef<Record<string, number>>({});
 
   // Ref bridge: handleSSEEvent must exist before useCodeMigration can be called (it needs
   // openSSE), so it can't reference useCodeMigration's return value directly. Populated below.
@@ -246,6 +286,8 @@ export function useMigration(
 
   // ── SSE event handler ───────────────────────────────────────────────────────
   const handleSSEEvent = useCallback((event: SSEEventPayload) => {
+    // Any event — including 'heartbeat' — proves the connection is alive.
+    setLastEventAt(Date.now());
     switch (event.type) {
       case 'tool_call': {
         // Direct SSE event from AgentExecutor — no log parsing needed
@@ -320,10 +362,33 @@ export function useMigration(
         const safePhaseStatus = VALID_PHASE_STATUSES.has(nextPhaseStatus as MigrationPhase['status'])
           ? (nextPhaseStatus as MigrationPhase['status'])
           : undefined;
+        const phaseId = event.data.phaseId as string;
         if (safePhaseStatus) {
-          setPhases(prev => prev.map(p =>
-            p.id === event.data.phaseId ? { ...p, status: safePhaseStatus } : p
-          ));
+          // Enforce monotonic progress: a stage going active/done means every
+          // EARLIER stage is necessarily finished. Without this, a stage whose
+          // 'done' event never arrives (e.g. 'discovery' on a checkpoint-resumed
+          // Stage 1) stays stuck 'active'/spinning while later stages show done.
+          setPhases(prev => {
+            const idx = prev.findIndex(p => p.id === phaseId);
+            if (idx === -1) return prev;
+            return prev.map((p, i) => {
+              if (i < idx)  return p.status === 'done' ? p : { ...p, status: 'done' };
+              if (i === idx) return { ...p, status: safePhaseStatus };
+              return p;
+            });
+          });
+
+          // Per-stage timing — best-effort, timed client-side (no per-phase
+          // timestamps are persisted server-side to derive this from instead).
+          if (safePhaseStatus === 'active') {
+            phaseStartedAtRef.current[phaseId] = Date.now();
+          } else if (safePhaseStatus === 'done' || safePhaseStatus === 'error') {
+            const startedAt = phaseStartedAtRef.current[phaseId];
+            if (startedAt) {
+              setPhaseDurations(prev => ({ ...prev, [phaseId]: Date.now() - startedAt }));
+              delete phaseStartedAtRef.current[phaseId];
+            }
+          }
         }
         // These sub-stages have no 'complete' SSE event — pull results from session state instead.
         if (
@@ -371,6 +436,10 @@ export function useMigration(
         } else {
           setStatus('complete');
           setProgress(100);
+          // Safety net: no phase can remain 'active' once the run completes.
+          // Flip lingering active→done, but leave 'pending' phases pending —
+          // Stage-2 phases (migration-planning onward) haven't run after Stage 1.
+          setPhases(prev => prev.map(p => p.status === 'active' ? { ...p, status: 'done' } : p));
           closeSSE();
           addLog('Migration complete.', 'success');
         }
@@ -429,6 +498,16 @@ export function useMigration(
   const codeMigration = useCodeMigration(backendUrl, sessionId, addLog, openSSE);
   codeMigrationRef.current = codeMigration;
 
+  // Manual reconnect — for when the Live panel's stale-connection detector fires
+  // and the user clicks "Reconnect" rather than reloading the whole page.
+  const reconnect = useCallback(() => {
+    if (!sessionId) return;
+    closeSSE();
+    setLastEventAt(Date.now()); // don't immediately re-flag as stale before the first event arrives
+    addLog('Reconnecting to live stream…', 'info');
+    openSSE(`${backendUrl}/api/stream/${sessionId}`);
+  }, [sessionId, backendUrl, openSSE, closeSSE, addLog]);
+
   // Full session restore on mount — reconnects SSE if a migration is still running server-side.
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -443,13 +522,29 @@ export function useMigration(
         // If a stack was detected, Phase 0 (scan) is definitionally complete —
         // guard against restored backend state that doesn't persist the scan
         // phase status, so the stepper doesn't revert it to 'pending' on refresh.
-        const restoredPhases = state.phases.length > 0 ? (state.phases as MigrationPhase[]) : MIGRATION_PHASES;
-        setPhases(state.detectedStack
-          ? restoredPhases.map(p => p.id === 'scan' && p.status === 'pending' ? { ...p, status: 'done' } : p)
-          : restoredPhases);
-        setProgress(state.progress);
+        const rawRestoredPhases = state.phases.length > 0 ? (state.phases as MigrationPhase[]) : MIGRATION_PHASES;
+        const scanFixedPhases = state.detectedStack
+          ? rawRestoredPhases.map(p => p.id === 'scan' && p.status === 'pending' ? { ...p, status: 'done' as const } : p)
+          : rawRestoredPhases;
+        // Reconcile: the backend can persist an inconsistent phases array (e.g.
+        // 'discovery' stuck 'active' while later phases are 'done'). Applying the
+        // same monotonic rules the live handlers use stops the reload from
+        // restoring a spinner that never resolves.
+        setPhases(reconcilePhases(scanFixedPhases, state.status as MigrationStatus));
+        // Same class of bug as the phases reconciliation above: the live 'complete'
+        // handler force-sets progress to 100, but that's an in-memory-only
+        // correction — the backend only ever persists whatever the last real
+        // 'progress' SSE event said (e.g. 98%, the last value before completion).
+        // Restoring that raw value verbatim shows "Stage 1 Complete" next to a
+        // stuck 98% instead of 100%.
+        setProgress(state.status === 'complete' ? 100 : state.progress);
         setCurrentFile(state.currentFile);
         setStatus(state.status as MigrationStatus);
+        // runStartedAt/phaseDurations deliberately NOT restored here — the backend
+        // doesn't persist a run-start timestamp or per-phase timing, and faking one
+        // (e.g. "started now") would misrepresent how long the run has actually
+        // been going. The elapsed timer simply doesn't show until the next real
+        // handleStart/handleUpload call sets it for real.
         codeMigrationRef.current?.setMigrationTaskList(state.migrationTaskList ?? null);
         codeMigrationRef.current?.setRuleCoverageReport(state.ruleCoverageReport ?? null);
         // Restore the HITL checkpoint if the session was reloaded while awaiting review.
@@ -475,6 +570,10 @@ export function useMigration(
   const handleUpload = useCallback(async (files: FileList | File[], explicitPaths?: string[]) => {
     addLog('Reading project files...', 'info');
     setStatus('scanning');
+    // Reset optimistically — otherwise a stale lastEventAt from a PREVIOUS run
+    // could make the connection-lost detector false-trigger the instant this new
+    // run's status flips to "running", before its own first SSE event arrives.
+    setLastEventAt(Date.now());
 
     const settings = readSettings();
     const formData = new FormData();
@@ -533,6 +632,12 @@ export function useMigration(
       if (p.id === 'scan') return { ...p, status: 'done' };
       return { ...p, status: 'pending' };
     }));
+    setRunStartedAt(Date.now());
+    setPhaseDurations({});
+    phaseStartedAtRef.current = {};
+    // Same reason as handleUpload above — avoid a stale lastEventAt from a
+    // previous run false-triggering the connection-lost detector immediately.
+    setLastEventAt(Date.now());
     addLog('Starting migration...', 'command');
 
     const settings = readSettings();
@@ -697,6 +802,7 @@ export function useMigration(
     ruleCoverageReport: codeMigration.ruleCoverageReport,
     isPlanning, isGenerating, isVerifying,
     graphResolutionSummary, isCheckpointBusy,
+    lastEventAt, runStartedAt, phaseDurations, reconnect,
     handleUpload, handleStart,
     handleContinueAnalysis, handleSkipToStage2,
     handleStartMigrationPlanning: codeMigration.handleStartMigrationPlanning,
