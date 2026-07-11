@@ -74,7 +74,7 @@ export default function HomePage() {
     handleStartMigrationPlanning, handleStartCodeGeneration,
     handleStartVerification,
     handleStop, handlePause, handleSelectFile, clearSelectedFile,
-    handleDownload,
+    handleDownload, handleNewProject,
   } = useMigration(backendUrl, notify);
 
   // Also pings a native OS notification for checkpoint-worthy transitions, so you
@@ -140,6 +140,22 @@ export default function HomePage() {
   const handleSettingsSaved = useCallback(() => {
     setSettingsTrigger(prev => prev + 1);
   }, []);
+
+  // ── New Project ────────────────────────────────────────────────────────────
+  // Blocked while a Stage-2 sub-stage is actively running — abandoning one
+  // mid-flight would leave the backend session in a half-finished state with
+  // no way back to it from this tab. Target Configuration is reset to blank
+  // (a new project likely targets a different stack) by clearing its
+  // localStorage keys and re-triggering AIPanel's existing settings-resync effect.
+  const newProjectBlocked = isRunning || isPlanning || isGenerating || isVerifying;
+  const handleStartNewProject = useCallback(() => {
+    handleNewProject();
+    localStorage.removeItem('setting_target_framework');
+    localStorage.removeItem('setting_target_database');
+    localStorage.removeItem('setting_target_lang');
+    localStorage.removeItem('setting_testing_framework');
+    setSettingsTrigger(prev => prev + 1);
+  }, [handleNewProject]);
 
   // ── File select wrapper ───────────────────────────────────────────────────
   const onSelectFile = useCallback((path: string) => {
@@ -221,6 +237,7 @@ export default function HomePage() {
             width={sidebarWidth}
             modernFileTree={modernFileTree}
             modernFolderBasename={modernFolderBasename}
+            onNewProject={newProjectBlocked ? undefined : handleStartNewProject}
           />
         )}
         {sidebarOpen && activeTab === 'search' && (
@@ -233,32 +250,41 @@ export default function HomePage() {
         )}
         {sidebarOpen && <div className="sash-vertical" onMouseDown={startResizeSidebar} />}
 
-        {/* Editor Area */}
-        {activeEditorTab === 'settings' ? (
-          <SettingsTab
-            onSettingsSaved={handleSettingsSaved}
-            onClose={() => setActiveEditorTab('code')}
-            settingsTrigger={settingsTrigger}
-          />
-        ) : activeEditorTab === 'aiconfig' ? (
-          <AIConfigTab
-            onClose={() => setActiveEditorTab('code')}
-            onSettingsSaved={handleSettingsSaved}
-            settingsTrigger={settingsTrigger}
-            tokenUsage={tokenUsage ?? undefined}
-            backendUrl={backendUrl}
-            sessionId={sessionId}
-          />
-        ) : (
-          <CodeViewer
-            legacyCode={legacyCode}
-            modernCode={modernCode}
-            legacyFile={selectedFile}
-            modernFile={selectedFile ?? null}
-            onClose={clearSelectedFile}
-            onDownload={handleDownload}
-          />
-        )}
+        {/* Editor column — Terminal docks only under this area (like VS Code/Theia),
+            never under the Explorer or Operational Panel, which stay full height. */}
+        <div className="editor-column">
+          {activeEditorTab === 'settings' ? (
+            <SettingsTab
+              onSettingsSaved={handleSettingsSaved}
+              onClose={() => setActiveEditorTab('code')}
+              settingsTrigger={settingsTrigger}
+            />
+          ) : activeEditorTab === 'aiconfig' ? (
+            <AIConfigTab
+              onClose={() => setActiveEditorTab('code')}
+              onSettingsSaved={handleSettingsSaved}
+              settingsTrigger={settingsTrigger}
+              tokenUsage={tokenUsage ?? undefined}
+              backendUrl={backendUrl}
+              sessionId={sessionId}
+            />
+          ) : (
+            <CodeViewer
+              legacyCode={legacyCode}
+              modernCode={modernCode}
+              legacyFile={selectedFile}
+              modernFile={selectedFile ?? null}
+              onClose={clearSelectedFile}
+              onDownload={handleDownload}
+            />
+          )}
+
+          {/* Terminal Sash */}
+          <div className="sash-horizontal" onMouseDown={startResizeTerminal} />
+
+          {/* Terminal */}
+          <TerminalPanel logs={logs} isRunning={isRunning} height={terminalHeight} />
+        </div>
 
         {/* Right Panel — AI Pipeline — always visible when toggled, even alongside AIConfig */}
         {aiPanelOpen && (
@@ -303,12 +329,6 @@ export default function HomePage() {
         {/* Auto-open AI Panel when pipeline icon clicked while on aiconfig tab */}
 
       </div>
-
-      {/* Terminal Sash */}
-      <div className="sash-horizontal" onMouseDown={startResizeTerminal} />
-
-      {/* Terminal */}
-      <TerminalPanel logs={logs} isRunning={isRunning} height={terminalHeight} />
 
       {/* Status Bar */}
       <footer className="status-bar">

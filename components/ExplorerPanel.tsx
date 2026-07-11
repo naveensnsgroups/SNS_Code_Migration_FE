@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { ChevronRight, FolderOpen, Check, Loader2 } from 'lucide-react';
 import { getFileIcon, getFolderIcon } from '../utils/labelProvider';
+import ConfirmDialog from './ConfirmDialog';
 import type { FileNode } from '@/types';
 
 interface Props {
@@ -14,6 +15,9 @@ interface Props {
   width?: number;
   modernFileTree?: FileNode[];       // Output directory tree from @parcel/watcher refresh
   modernFolderBasename?: string;     // Display name for the output folder (e.g. "Demo-5")
+  /** Undefined while a Stage-2 sub-stage is actively running — the button hides
+   * entirely rather than letting a run be abandoned mid-flight. */
+  onNewProject?: () => void;
 }
 
 function FileItem({
@@ -77,8 +81,9 @@ function FileItem({
   );
 }
 
-export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, onUpload, hasProject, width, modernFileTree = [], modernFolderBasename }: Props) {
+export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, onUpload, hasProject, width, modernFileTree = [], modernFolderBasename, onNewProject }: Props) {
   const [isUploading, setIsUploading] = useState(false);
+  const [showNewProjectConfirm, setShowNewProjectConfirm] = useState(false);
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
@@ -149,7 +154,27 @@ export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, on
 
   return (
     <aside className="sidebar" style={{ width: width ? `${width}px` : undefined }}>
-      <div className="sidebar__header">Explorer</div>
+      <div className="sidebar__header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>Explorer</span>
+        {hasProject && onNewProject && (
+          <button
+            type="button"
+            className="sidebar__header-btn"
+            onClick={() => setShowNewProjectConfirm(true)}
+            title="Open a different project — the current session stays saved on the server"
+          >
+            <FolderOpen size={13} />
+          </button>
+        )}
+      </div>
+      <ConfirmDialog
+        open={showNewProjectConfirm}
+        title="Start a new project"
+        message="The current session stays saved on the server, but this tab will stop showing it — you'll need its session id to come back to it."
+        confirmLabel="Start New Project"
+        onConfirm={() => { setShowNewProjectConfirm(false); onNewProject?.(); }}
+        onCancel={() => setShowNewProjectConfirm(false)}
+      />
       <div className="sidebar__content">
         {!hasProject ? (
           <div className="theia-welcome-view">

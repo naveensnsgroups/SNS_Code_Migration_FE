@@ -167,6 +167,7 @@ export interface UseMigrationReturn {
   handleSelectFile: (path: string, setActiveEditorTab: (t: 'code' | 'settings' | 'aiconfig') => void) => Promise<void>;
   clearSelectedFile: () => void;
   handleDownload: (fileName: string) => void;
+  handleNewProject: () => void;
 }
 
 // ── Main Hook ─────────────────────────────────────────────────────────────────
@@ -791,6 +792,48 @@ export function useMigration(
     downloadFile(backendUrl, sessionId, fileName);
   }, [sessionId, backendUrl]);
 
+  // ── New Project ──────────────────────────────────────────────────────────────
+  // Wipes every piece of client-side session state so the Explorer's upload UI
+  // reappears (it's gated on fileTree.length === 0). Nothing is deleted on the
+  // backend — the old session's files stay on disk under its own session id,
+  // this just stops the tab from displaying it. Callers are responsible for
+  // guarding against calling this mid-run (Stage-2 sub-stages etc).
+  const handleNewProject = useCallback(() => {
+    closeSSE();
+    setActiveTool(null);
+    pendingToolsRef.current.clear();
+
+    setStatus('idle');
+    setSessionId(null);
+    setFileTree([]);
+    setDetectedStack(null);
+    setSelectedFile(null);
+    setLegacyCode(null);
+    setModernCode(null);
+    setLogs([]);
+    setProgress(0);
+    setCurrentFile('');
+    setPhases(MIGRATION_PHASES);
+    setModernFileTree([]);
+    setModernFolderBasename('');
+    setTokenUsage(null);
+    setGraphResolutionSummary(null);
+    setIsCheckpointBusy(false);
+    setToolCallHistory([]);
+    setLastEventAt(null);
+    setRunStartedAt(null);
+    setPhaseDurations({});
+    phaseStartedAtRef.current = {};
+
+    codeMigrationRef.current?.setMigrationTaskList(null);
+    codeMigrationRef.current?.setRuleCoverageReport(null);
+
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('last_session_id');
+      localStorage.removeItem('live_token_usage');
+    }
+  }, [closeSSE]);
+
   return {
     status, sessionId, fileTree, detectedStack, selectedFile,
     legacyCode, modernCode, logs, progress, currentFile, phases,
@@ -809,6 +852,6 @@ export function useMigration(
     handleStartCodeGeneration: codeMigration.handleStartCodeGeneration,
     handleStartVerification: codeMigration.handleStartVerification,
     handleStop, handlePause, handleSelectFile, clearSelectedFile,
-    handleDownload,
+    handleDownload, handleNewProject,
   };
 }

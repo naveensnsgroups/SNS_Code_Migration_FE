@@ -127,6 +127,16 @@ export default function AIPanel({
   // matter what) OR (a plan exists AND the user hasn't explicitly unlocked it).
   const targetConfigLocked  = targetConfigBusy || (targetConfigHasPlan && !targetConfigUnlocked);
 
+  // New Project wipes hasProject back to false — without this, a stale "unlocked"
+  // flag from the previous project would carry over and let the NEXT project's
+  // freshly-created plan start out incorrectly editable.
+  useEffect(() => {
+    if (!hasProject) {
+      setTargetConfigUnlocked(false);
+      targetConfigSnapshotRef.current = null;
+    }
+  }, [hasProject]);
+
   // Target Configuration (framework/database/language/test) is a Stage-2 concern
   // only — Stage-1 analysis never reads those 4 fields (resolveStreamingProvider
   // uses only provider+model), and Stage 2's /plan takes its own fresh targetStack.
