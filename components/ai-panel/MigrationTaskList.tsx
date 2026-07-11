@@ -61,7 +61,7 @@ export default function MigrationTaskList({ tasks, ruleCoverage }: Props) {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <StatusIcon size={11} style={{ color, flexShrink: 0 }} />
-                <div style={{ color: 'var(--text-muted)' }}>{task.legacyFile}</div>
+                <div style={{ color: 'var(--text-primary)' }}>{task.legacyFile}</div>
               </div>
               <div style={{ color: 'var(--text-info)', marginLeft: '16px' }}>&rarr; {task.targetFile}</div>
               {task.rulesInvolved.length > 0 && (

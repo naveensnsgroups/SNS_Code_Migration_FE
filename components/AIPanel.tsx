@@ -2,13 +2,14 @@
 // is delegated to focused sub-components in components/ai-panel/.
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Activity, CheckCircle2, ArrowDown } from 'lucide-react';
 import type { DetectedStack, MigrationStatus, MigrationPhase, TargetStack, AIProvider, MigrationTaskEntry, RuleCoverageEntry, GraphResolutionSummary } from '@/types';
 import type { LogEntry } from '@/types';
 
 import { readSettings } from '@/hooks/useSettings';
 import { useLiveStatus } from '@/hooks/useLiveStatus';
+import { detectCheckpoint } from '@/utils/checkpoint';
 import { ALL_PROVIDERS } from '@/constants/models';
 
 import StackBadge         from '@/components/ai-panel/StackBadge';
@@ -104,6 +105,28 @@ export default function AIPanel({
   // Gates the Stage-2 "Start Code Migration" button in ActionButtons.
   const scanPhaseDone = phases.find(p => p.id === 'scan')?.status === 'done';
 
+  // ── Target Configuration lock ───────────────────────────────────────────────
+  // Once a migration plan exists, the values in Target Configuration have already
+  // been "consumed" — the plan (and any generated code) was built against exactly
+  // those values. Leaving the fields freely editable after that point lets the
+  // displayed config silently drift out of sync with what's actually on disk:
+  // change "Target Framework" after code was generated for Fastapi, and it's no
+  // longer clear what "Verify Code" is even checking against.
+  //
+  // targetConfigUnlocked is a deliberate, explicit opt-in (via the section's Edit
+  // affordance) — not tied to component state that could reset unexpectedly, since
+  // an accidental unlock defeats the whole point of locking.
+  const [targetConfigUnlocked, setTargetConfigUnlocked] = useState(false);
+  // Snapshot taken at the moment of unlocking, restored verbatim on Cancel — the
+  // same "edit / save / cancel" pattern as any settings form.
+  const targetConfigSnapshotRef = useRef<{ framework: string; db: string; lang: string; test: string } | null>(null);
+
+  const targetConfigHasPlan = !!migrationTaskList && migrationTaskList.length > 0;
+  const targetConfigBusy    = !!isPlanning || !!isGenerating || !!isVerifying;
+  // Locked = busy (never editable while a sub-stage is actually running, no
+  // matter what) OR (a plan exists AND the user hasn't explicitly unlocked it).
+  const targetConfigLocked  = targetConfigBusy || (targetConfigHasPlan && !targetConfigUnlocked);
+
   // Target Configuration (framework/database/language/test) is a Stage-2 concern
   // only — Stage-1 analysis never reads those 4 fields (resolveStreamingProvider
   // uses only provider+model), and Stage 2's /plan takes its own fresh targetStack.
@@ -125,10 +148,10 @@ export default function AIPanel({
       'Resolved graphs (symbol / entity / api) are empty — see Graph Review before continuing.';
   }
 
-  // Stage 1 finished, Stage 2 not started yet — a human checkpoint: review the
-  // analysis, configure the target below, then start code migration.
-  const stage1Checkpoint =
-    isComplete && (!migrationTaskList || migrationTaskList.length === 0);
+  // HITL checkpoint banner — the same shared detector the Live Activity panel uses,
+  // so both frame every pause (Stage 1 done, plan ready, code generated) identically.
+  // Returns null mid-run and when the migration is genuinely complete.
+  const checkpoint = detectCheckpoint(status, phases);
 
   // ── Live Status Overlay toggle (manual only) ───────────────────────────
   const [liveOpen, setLiveOpen] = useState(false);
@@ -217,7 +240,31 @@ export default function AIPanel({
       testFramework,
       outputMode:    'direct',
     });
+    // Submitting starts a fresh planning run against whatever values are
+    // current right now — re-lock immediately so the section reflects "this is
+    // what's being planned with", not an editable state mid-run.
+    setTargetConfigUnlocked(false);
   }, [provider, model, targetFramework, targetDb, targetLang, testFramework, onStartMigration]);
+
+  // ── Target Configuration edit / cancel (only relevant once a plan exists —
+  // see targetConfigLocked above) ─────────────────────────────────────────────
+  const handleRequestEditTargetConfig = useCallback(() => {
+    targetConfigSnapshotRef.current = {
+      framework: targetFramework, db: targetDb, lang: targetLang, test: testFramework,
+    };
+    setTargetConfigUnlocked(true);
+  }, [targetFramework, targetDb, targetLang, testFramework]);
+
+  const handleCancelEditTargetConfig = useCallback(() => {
+    const snap = targetConfigSnapshotRef.current;
+    if (snap) {
+      setTargetFramework(snap.framework); save('setting_target_framework', snap.framework);
+      setTargetDb(snap.db);               save('setting_target_database', snap.db);
+      setTargetLang(snap.lang);           save('setting_target_lang', snap.lang);
+      setTestFramework(snap.test);        save('setting_testing_framework', snap.test);
+    }
+    setTargetConfigUnlocked(false);
+  }, [save]);
 
   // ── Stage 2 — Start Code Generation ────────────────────────────────────────
   const generatedCount = (migrationTaskList ?? []).filter(t => t.status === 'generated' || t.status === 'verified').length;
@@ -299,24 +346,22 @@ export default function AIPanel({
         ) : (
           <>
             {/* Detected Stack */}
-            <StackBadge detectedStack={detectedStack} />
+            <StackBadge detectedStack={detectedStack} targetFramework={targetFramework} targetDb={targetDb} targetLang={targetLang} targetTestFramework={testFramework} />
 
-            {/* Stage 1 → Stage 2 human checkpoint banner: makes it explicit that
-                the run isn't "done" — it's the user's turn to review + configure
-                + start code migration. Sits above Target Config so the order of
-                next steps reads top-to-bottom. */}
-            {stage1Checkpoint && (
+            {/* HITL checkpoint banner: makes it explicit that the run isn't "done"
+                — it's the user's turn to review and start the next stage. Consistent
+                framing at every checkpoint (Stage 1 done, plan ready, code generated),
+                driven by the shared detector. Sits above the controls so the order
+                of next steps reads top-to-bottom. */}
+            {checkpoint && (
               <div className="stage1-checkpoint">
                 <div className="stage1-checkpoint__head">
                   <CheckCircle2 size={15} style={{ color: 'var(--text-success)', flexShrink: 0 }} />
-                  <span>Stage 1 Analysis complete</span>
+                  <span>{checkpoint.label}</span>
                 </div>
-                <p className="stage1-checkpoint__body">
-                  Review <code>Stage1_Analysis.md</code> in the output workspace, then configure your
-                  target below and start code migration.
-                </p>
+                <p className="stage1-checkpoint__body">{checkpoint.hint}</p>
                 <div className="stage1-checkpoint__next">
-                  <ArrowDown size={11} /> Next: set Target Configuration
+                  <ArrowDown size={11} /> Your turn — review, then continue below
                 </div>
               </div>
             )}
@@ -330,7 +375,11 @@ export default function AIPanel({
                 targetDb={targetDb}
                 targetLang={targetLang}
                 testFramework={testFramework}
-                disabled={isRunning}
+                hasPlan={targetConfigHasPlan}
+                isBusy={targetConfigBusy}
+                locked={targetConfigLocked}
+                onRequestEdit={handleRequestEditTargetConfig}
+                onCancelEdit={handleCancelEditTargetConfig}
                 onFrameworkChange={v => { setTargetFramework(v); save('setting_target_framework', v); }}
                 onDbChange={v        => { setTargetDb(v);        save('setting_target_database', v);  }}
                 onLangChange={v      => { setTargetLang(v);      save('setting_target_lang', v);       }}

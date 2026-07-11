@@ -8,6 +8,7 @@ import { Loader2, AlertTriangle, AlertCircle, X, Activity, Check, UserCheck, Wif
 import type { MigrationStatus, MigrationPhase } from '@/types';
 import type { LiveStatusData } from './types';
 import { useNow, formatDuration } from '@/hooks/useNow';
+import { detectCheckpoint } from '@/utils/checkpoint';
 
 // No update from the server (not even a heartbeat) for this long while a run is
 // supposedly active means the connection likely died silently, not that a stage
@@ -25,10 +26,6 @@ const STEP_STATUS_LABEL: Record<MigrationPhase['status'], string> = {
   error:   'failed',
   pending: 'pending',
 };
-
-// Stage-2 phases — used to tell "Stage 1 just finished, Stage 2 not started yet"
-// apart from a fully-finished run.
-const STAGE2_PHASE_IDS = ['migration-planning', 'code-generation', 'verification', 'migration-assembly'];
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
@@ -209,20 +206,18 @@ export default function LiveStatusOverlay({
   const effectiveStatus: MigrationStatus =
     (status === 'idle' && realPct > 0 && realPct < 100) ? 'planning' : status;
 
-  // Stage 1 finished but Stage 2 hasn't started — status is 'complete', yet every
-  // Stage-2 phase is still 'pending'. This is really a human checkpoint (review the
-  // analysis, configure a target, start code migration), not the end of the job —
-  // so show an "awaiting your action" state instead of a plain "Complete".
-  const stage1DoneAwaitingStage2 =
-    status === 'complete' &&
-    phases.length > 0 &&
-    phases.filter(p => STAGE2_PHASE_IDS.includes(p.id)).every(p => p.status === 'pending') &&
-    phases.some(p => STAGE2_PHASE_IDS.includes(p.id));
+  // HITL checkpoint: the backend reverts status to 'complete' at the END of every
+  // user-gated stage (Stage-1 done, plan ready, code generated), not just the true
+  // end — so a bare 'complete' is ambiguous. detectCheckpoint resolves it by the
+  // next pending phase, returning the right "awaiting your action" label/hint, or
+  // null when the run is genuinely finished. Shared with the Operational Panel's
+  // banner so both frame the same pause identically.
+  const checkpoint = detectCheckpoint(status, phases);
 
   const dotClass   = DOT_CLASS[effectiveStatus]   ?? DOT_CLASS.idle;
-  const badgeClass = stage1DoneAwaitingStage2 ? 'ls-overlay__badge--review' : (BADGE_CLASS[effectiveStatus] ?? BADGE_CLASS.idle);
-  const statusText = stage1DoneAwaitingStage2 ? 'Stage 1 Complete' : (STATUS_TEXT[effectiveStatus] ?? 'Ready');
-  const showReviewIcon = effectiveStatus === 'awaiting-graph-review' || stage1DoneAwaitingStage2;
+  const badgeClass = checkpoint ? 'ls-overlay__badge--review' : (BADGE_CLASS[effectiveStatus] ?? BADGE_CLASS.idle);
+  const statusText = checkpoint ? checkpoint.label : (STATUS_TEXT[effectiveStatus] ?? 'Ready');
+  const showReviewIcon = effectiveStatus === 'awaiting-graph-review' || !!checkpoint;
   const effectiveRunning = isRunning || (status === 'idle' && realPct > 0 && realPct < 100);
   // Defensive: "Complete" can never coexist with anything but 100%, no matter what
   // realPct's source data says — a completed run showing 98% reads as a bug even
@@ -297,10 +292,10 @@ export default function LiveStatusOverlay({
           </div>
         )}
 
-        {/* Next-step hint at the Stage-1 → Stage-2 human checkpoint */}
-        {stage1DoneAwaitingStage2 && (
+        {/* Next-step hint at any HITL checkpoint (Stage-1 → Stage-2, plan ready, code generated) */}
+        {checkpoint && (
           <div className="ls-overlay__next-step">
-            Review the analysis, then configure a target and start code migration in the panel.
+            {checkpoint.hint}
           </div>
         )}
 
