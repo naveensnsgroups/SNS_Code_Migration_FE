@@ -7,15 +7,28 @@ export type MigrationStatus =
   | 'discovery'
   | 'file-analysis'
   | 'graph-resolution'
+  // HITL checkpoint: pipeline halts after graph-resolution for the user to review
+  // the graphs and choose Continue (report) or Skip (code migration).
+  | 'awaiting-graph-review'
   | 'section-writing'
   | 'assembly'
+  | 'migration-planning'
+  | 'code-generation'
+  | 'verification'
+  | 'migration-assembly'
   | 'complete'
   | 'error'
   | 'paused';
 
-// 'stream' = a raw streamed chunk of the model's own reasoning text (see
-// AgentExecutor's 'log' broadcast with level: 'stream'), rendered distinctly
-// by TerminalPanel — not a real log severity level.
+// Real per-run graph-resolution result the user reviews at the HITL checkpoint.
+// Mirrors the backend GraphResolutionSummary (session/types.ts).
+export interface GraphResolutionSummary {
+  counters: Record<string, number>;
+  primaryGraphsEmpty: boolean;
+  generatedAt: string;
+}
+
+// 'stream' = a raw streamed chunk of model reasoning text, not a real severity level.
 export type LogLevel = 'info' | 'success' | 'error' | 'warning' | 'command' | 'stream';
 
 export interface LogEntry {
@@ -74,9 +87,7 @@ export interface MigrateStartRequest {
   apiKey: string;
 }
 
-// AI_PROVIDERS: provider labels only.
-// Model lists are fully user-managed in Settings — no hardcoded defaults here.
-// Each provider's available models are stored in localStorage by the user.
+// Provider labels only — model lists are fully user-managed in Settings.
 export const AI_PROVIDERS: Record<AIProvider, { label: string }> = {
   anthropic:   { label: 'Anthropic Claude' },
   openai:      { label: 'OpenAI GPT' },
@@ -89,10 +100,32 @@ export const AI_PROVIDERS: Record<AIProvider, { label: string }> = {
 };
 
 export const MIGRATION_PHASES: MigrationPhase[] = [
-  { id: 'scan',             label: 'Stack Detection',   status: 'pending' },
-  { id: 'discovery',        label: 'Discovery',         status: 'pending' },
-  { id: 'file-analysis',    label: 'File Analysis',     status: 'pending' },
-  { id: 'graph-resolution', label: 'Graph Resolution',  status: 'pending' },
-  { id: 'section-writing',  label: 'Section Writing',   status: 'pending' },
-  { id: 'assembly',         label: 'Assembly',          status: 'pending' },
+  { id: 'scan',               label: 'Stack Detection',    status: 'pending' },
+  { id: 'discovery',          label: 'Discovery',          status: 'pending' },
+  { id: 'file-analysis',      label: 'File Analysis',      status: 'pending' },
+  { id: 'graph-resolution',   label: 'Graph Resolution',   status: 'pending' },
+  { id: 'section-writing',    label: 'Section Writing',    status: 'pending' },
+  { id: 'assembly',           label: 'Assembly',           status: 'pending' },
+  { id: 'migration-planning', label: 'Migration Planning', status: 'pending' },
+  { id: 'code-generation',    label: 'Code Generation',    status: 'pending' },
+  { id: 'verification',      label: 'Verification',       status: 'pending' },
+  { id: 'migration-assembly', label: 'Migration Report',   status: 'pending' },
 ];
+
+// Per-file migration task entry — mirrors the backend's MigrationTaskEntry.
+export interface MigrationTaskEntry {
+  legacyFile:    string;
+  targetFile:    string;
+  rulesInvolved: string[];
+  dependsOn:     string[];
+  status:        'pending' | 'generated' | 'verified' | 'failed';
+  lastError?:    string;
+}
+
+export interface RuleCoverageEntry {
+  legacyFile: string;
+  targetFile: string;
+  rules:      string[];
+  covered?:   string[];
+  uncovered?: string[];
+}

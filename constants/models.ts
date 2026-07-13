@@ -1,19 +1,5 @@
-// =============================================================================
-//  constants/models.ts
-//  SINGLE source of truth for the per-provider "seed" model lists shown in
-//  Settings, and for the alias/agent model dropdowns elsewhere.
-//
-//  Before this file existed, the same seed list was independently hardcoded
-//  in three places (SettingsTab.tsx, AIConfigTab.tsx, AliasesTab.tsx) with
-//  different naming schemes ("claude-sonnet-4-6" vs "anthropic/claude-sonnet-4-6")
-//  and no guarantee they stayed in sync. These are still hardcoded defaults —
-//  the backend has no "list available models" endpoint — but now there is
-//  exactly ONE place to update them.
-//
-//  Users can freely add/remove models per provider in Settings; those
-//  customizations are stored separately (setting_<provider>_models) and take
-//  priority over this seed list wherever it's consumed as a fallback.
-// =============================================================================
+// Single source of truth for per-provider seed model lists (the backend has no
+// "list available models" endpoint). Users can override per-provider in Settings.
 
 import type { AIProvider } from '@/types';
 
@@ -28,6 +14,9 @@ export const DEFAULT_PROVIDER_MODELS: Record<AIProvider, string[]> = {
   huggingface: ['meta-llama/Meta-Llama-3-70B-Instruct', 'mistralai/Mixtral-8x7B-Instruct-v0.1'],
 };
 
+/** Single source of truth for the list of supported provider IDs — derive from here, never re-hardcode. */
+export const ALL_PROVIDERS: AIProvider[] = Object.keys(DEFAULT_PROVIDER_MODELS) as AIProvider[];
+
 /** Flattened "provider/model" strings for every default model, across all providers. */
 export function getAllDefaultModelOptions(): string[] {
   return (Object.keys(DEFAULT_PROVIDER_MODELS) as AIProvider[]).flatMap(provider =>
@@ -35,11 +24,7 @@ export function getAllDefaultModelOptions(): string[] {
   );
 }
 
-/**
- * Recommended starting alias map — derived from DEFAULT_PROVIDER_MODELS so it
- * can never drift from the seed list above. Only used the very first time a
- * user opens Model Aliases before they've customized anything.
- */
+/** Starting alias map before the user customizes anything — derived so it can't drift from the seed list. */
 export function getDefaultAliases(): Record<string, string> {
   const anthropicDefault = `anthropic/${DEFAULT_PROVIDER_MODELS.anthropic[0]}`;
   const openaiDefault    = `openai/${DEFAULT_PROVIDER_MODELS.openai[1] ?? DEFAULT_PROVIDER_MODELS.openai[0]}`;

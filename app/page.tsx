@@ -2,6 +2,7 @@
 
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { Files, Search, Bot, Settings, Zap, Terminal, Wrench, Database, DollarSign } from 'lucide-react';
+import GithubLogo from '@/components/icons/GithubLogo';
 import ExplorerPanel  from '@/components/ExplorerPanel';
 import CodeViewer     from '@/components/CodeViewer';
 import AIPanel        from '@/components/AIPanel';
@@ -9,6 +10,8 @@ import TerminalPanel  from '@/components/TerminalPanel';
 import SearchPanel    from '@/components/SearchPanel';
 import SettingsTab    from '@/components/SettingsTab';
 import AIConfigTab    from '@/components/AIConfigTab';
+import AccountMenu, { type GithubUser } from '@/components/AccountMenu';
+import GithubSignInDialog from '@/components/GithubSignInDialog';
 import { NotificationBell } from '@/components/notifications/NotificationCenter';
 import { useMigration }  from '@/hooks/useMigration';
 import { usePanelResize } from '@/hooks/useResize';
@@ -19,17 +22,22 @@ import type { MigrationStatus } from '@/types';
 // ── Status Label Map ───────────────────────────────────────────────────────────
 
 const STATUS_LABEL: Record<MigrationStatus, string> = {
-  idle:               'Ready',
-  scanning:           'Scanning...',
-  planning:           'Planning...',
-  discovery:          'Discovery...',
-  'file-analysis':    'File Analysis...',
-  'graph-resolution': 'Graph Resolution...',
-  'section-writing':  'Writing Sections...',
-  assembly:           'Assembly...',
-  complete:           'Complete ✅',
-  error:              'Error ❌',
-  paused:             'Paused ⏸',
+  idle:                 'Ready',
+  scanning:             'Scanning...',
+  planning:             'Planning...',
+  discovery:            'Discovery...',
+  'file-analysis':      'File Analysis...',
+  'graph-resolution':   'Graph Resolution...',
+  'awaiting-graph-review': 'Awaiting Graph Review',
+  'section-writing':    'Writing Sections...',
+  assembly:             'Assembly...',
+  'migration-planning': 'Planning Migration...',
+  'code-generation':    'Generating Code...',
+  verification:         'Verifying...',
+  'migration-assembly': 'Migration Report...',
+  complete:             'Complete',
+  error:                'Error',
+  paused:               'Paused',
 };
 
 // ── Page ───────────────────────────────────────────────────────────────────────
@@ -41,6 +49,10 @@ export default function HomePage() {
   const [aiPanelOpen, setAiPanelOpen]           = useState(false);
   const [activeEditorTab, setActiveEditorTab]   = useState<'code' | 'settings' | 'aiconfig'>('code');
   const [settingsTrigger, setSettingsTrigger]   = useState(0);
+  const [accountMenuOpen, setAccountMenuOpen]   = useState(false);
+  // GitHub account — null until signed in, restored from localStorage on mount.
+  const [githubUser, setGithubUser]             = useState<GithubUser | null>(null);
+  const [githubSignInOpen, setGithubSignInOpen] = useState(false);
 
   // ── Settings + backend URL ────────────────────────────────────────────────
   const backendUrl = useBackendUrl(settingsTrigger);
@@ -62,9 +74,32 @@ export default function HomePage() {
     modernFileTree, modernFolderBasename,
     tokenUsage, isRunning, hasProject,
     activeTool, toolCallHistory,
-    handleUpload, handleStart, handleStop, handlePause, handleSelectFile, clearSelectedFile,
-    handleDownload,
+    migrationTaskList, ruleCoverageReport, isPlanning, isGenerating, isVerifying,
+    graphResolutionSummary, isCheckpointBusy,
+    lastEventAt, runStartedAt, phaseDurations, reconnect,
+    handleUpload, handleCloneFromGithub, handleStart, handleContinueAnalysis, handleSkipToStage2,
+    handleStartMigrationPlanning, handleStartCodeGeneration,
+    handleStartVerification,
+    handleStop, handlePause, handleSelectFile, clearSelectedFile,
+    handleDownload, handleNewProject,
   } = useMigration(backendUrl, notify);
+
+  // Also pings a native OS notification for checkpoint-worthy transitions, so you
+  // don't have to keep the tab focused to notice one was reached. Gated on all of:
+  // the user opted in (Settings > Desktop Notifications), the browser actually
+  // granted permission (requested at opt-in time, in SettingsTab's click handler —
+  // never here, since Notification.requestPermission() needs a real user gesture),
+  // and the tab isn't currently focused (no point pinging what's already visible).
+  const notifyCheckpoint = useCallback((opts: Parameters<typeof notify>[0], nativeBody?: string) => {
+    notify(opts);
+    if (!nativeBody) return;
+    if (typeof document !== 'undefined' && !document.hidden) return;
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+    let enabled = false;
+    try { enabled = JSON.parse(localStorage.getItem('setting_general_desktop_notifications') || 'false'); } catch {}
+    if (!enabled) return;
+    new Notification('Code Migration Platform', { body: nativeBody });
+  }, [notify]);
 
   // Fire notifications on status transitions (SNS IDE MessageService pattern)
   useEffect(() => {
@@ -77,10 +112,25 @@ export default function HomePage() {
         notify({ type: 'info', message: 'Stage-1 Analysis started…' });
         break;
       case 'complete':
-        notify({ type: 'success', message: 'Stage-1 Analysis complete! View Stage1_Analysis.md in Explorer.', timeout: 8000 });
+        notifyCheckpoint(
+          { type: 'success', message: 'Stage-1 Analysis complete! View Stage1_Analysis.md in Explorer.', timeout: 8000 },
+          'Stage 1 Analysis complete — review it and configure code migration.'
+        );
+        break;
+      // HITL checkpoint: the pipeline is paused waiting on YOUR decision (continue
+      // to the analysis report, or skip to code migration) — previously fired no
+      // notification of any kind, in-app or native, so reaching it was silent.
+      case 'awaiting-graph-review':
+        notifyCheckpoint(
+          { type: 'info', message: 'Graph resolution complete — review it in the Operational Panel to continue.', timeout: 8000 },
+          'Graph review checkpoint reached — your decision is needed to continue.'
+        );
         break;
       case 'error':
-        notify({ type: 'error', message: 'Pipeline error — check the Terminal for details.', persistent: true });
+        notifyCheckpoint(
+          { type: 'error', message: 'Pipeline error — check the Terminal for details.', persistent: true },
+          'Pipeline error — check the app for details.'
+        );
         break;
       case 'paused':
         notify({ type: 'warning', message: 'Migration paused. Click Resume to continue.' });
@@ -91,25 +141,81 @@ export default function HomePage() {
         }
         break;
     }
-  }, [status, notify]);
+  }, [status, notify, notifyCheckpoint]);
 
   // ── Settings saved callback ───────────────────────────────────────────────
   const handleSettingsSaved = useCallback(() => {
     setSettingsTrigger(prev => prev + 1);
   }, []);
 
+  // ── New Project ────────────────────────────────────────────────────────────
+  // Blocked while a Stage-2 sub-stage is actively running — abandoning one
+  // mid-flight would leave the backend session in a half-finished state with
+  // no way back to it from this tab. Target Configuration is reset to blank
+  // (a new project likely targets a different stack) by clearing its
+  // localStorage keys and re-triggering AIPanel's existing settings-resync effect.
+  const newProjectBlocked = isRunning || isPlanning || isGenerating || isVerifying;
+  const handleStartNewProject = useCallback(() => {
+    handleNewProject();
+    localStorage.removeItem('setting_target_framework');
+    localStorage.removeItem('setting_target_database');
+    localStorage.removeItem('setting_target_lang');
+    localStorage.removeItem('setting_testing_framework');
+    setSettingsTrigger(prev => prev + 1);
+  }, [handleNewProject]);
+
   // ── File select wrapper ───────────────────────────────────────────────────
   const onSelectFile = useCallback((path: string) => {
     handleSelectFile(path, setActiveEditorTab);
   }, [handleSelectFile]);
 
+  // ── GitHub account (device-flow OAuth) ─────────────────────────────────────
+  // Restore a previous sign-in on mount. The token lives in localStorage (same
+  // model the app already uses for provider API keys) so clone/push can reuse it.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('github_user');
+      if (raw) setGithubUser(JSON.parse(raw));
+    } catch { /* ignore malformed */ }
+  }, []);
+
+  // No client-side gate here — the backend ships its own default Client ID
+  // (GITHUB_OAUTH_CLIENT_ID), so sign-in just works, the same as VS Code's
+  // "Sign in with GitHub" needing no setup. If that env var genuinely isn't
+  // set on the server, GithubSignInDialog surfaces that error itself.
+  const handleGithubSignIn = useCallback(() => {
+    setAccountMenuOpen(false);
+    setGithubSignInOpen(true);
+  }, []);
+
+  const handleGithubSignInSuccess = useCallback((token: string, user: GithubUser) => {
+    localStorage.setItem('github_access_token', token);
+    localStorage.setItem('github_user', JSON.stringify(user));
+    setGithubUser(user);
+    setGithubSignInOpen(false);
+    notify({ type: 'success', message: `Connected to GitHub as @${user.login}.` });
+  }, [notify]);
+
+  const handleGithubSignOut = useCallback(() => {
+    setAccountMenuOpen(false);
+    localStorage.removeItem('github_access_token');
+    localStorage.removeItem('github_user');
+    setGithubUser(null);
+    notify({ type: 'info', message: 'Signed out of GitHub.' });
+  }, [notify]);
+
+  const githubClientId = (typeof window !== 'undefined'
+    ? (localStorage.getItem('setting_general_github_client_id') || '')
+    : '').replace(/^"|"$/g, '').trim();
+
   // ── Activity bar items ─────────────────────────────────────────────────────
+  // Top group scrolls with the views; Settings + Account are pinned at the
+  // bottom (SNS IDE / Theia leftPanelHandler.addBottomMenu pattern).
   const activityItems = [
-    { icon: <Files size={18} />,    id: 'explorer', title: 'Explorer',                type: 'sidebar'       as const },
-    { icon: <Search size={18} />,   id: 'search',   title: 'Search',                  type: 'sidebar'       as const },
-    { icon: <Bot size={18} />,      id: 'aiconfig', title: 'AI Configuration',         type: 'tab'           as const, tabId: 'aiconfig' as const },
-    { icon: <Zap size={18} />,      id: 'pipeline', title: 'Operational Panel',        type: 'right-sidebar' as const },
-    { icon: <Settings size={18} />, id: 'settings', title: 'Settings',                 type: 'tab'           as const, tabId: 'settings' as const },
+    { icon: <Files size={21} />,    id: 'explorer', title: 'Explorer',                type: 'sidebar'       as const },
+    { icon: <Search size={21} />,   id: 'search',   title: 'Search',                  type: 'sidebar'       as const },
+    { icon: <Bot size={21} />,      id: 'aiconfig', title: 'AI Configuration',         type: 'tab'           as const, tabId: 'aiconfig' as const },
+    { icon: <Zap size={21} />,      id: 'pipeline', title: 'Operational Panel',        type: 'right-sidebar' as const },
   ];
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -118,13 +224,16 @@ export default function HomePage() {
 
       {/* Title Bar */}
       <header className="title-bar">
-        <div className="title-bar__logo" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <img src="/agent_workbench_logo.png" alt="Logo" style={{ width: '18px', height: '18px' }} />
-          <span>Code Migration Platform</span>
+        <div className="title-bar__logo">
+          <img src="/agent_workbench_logo.png" alt="Logo" className="title-bar__logo-img" />
+          <span className="title-bar__brand">
+            <span className="title-bar__brand-strong">Code Migration</span>
+            <span className="title-bar__brand-light">Platform</span>
+          </span>
         </div>
         <div className="title-bar__actions">
           {sessionId && (
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+            <span style={{ fontSize: 11, color: 'var(--activity-fg-inactive)', fontFamily: 'var(--font-mono)' }}>
               Session: {sessionId}
             </span>
           )}
@@ -162,7 +271,42 @@ export default function HomePage() {
               </button>
             );
           })}
+
+          {/* Bottom-pinned group: Account + Settings (Theia addBottomMenu pattern) */}
+          <div className="activity-bar__bottom">
+            <button
+              className={`activity-bar__btn ${accountMenuOpen ? 'active' : ''}`}
+              title={githubUser ? `Signed in as @${githubUser.login}` : 'Accounts'}
+              onClick={() => setAccountMenuOpen(o => !o)}
+            >
+              <GithubLogo size={21} />
+              {githubUser && <span className="activity-bar__connected-dot" />}
+            </button>
+            <button
+              className={`activity-bar__btn ${activeEditorTab === 'settings' ? 'active' : ''}`}
+              title="Settings"
+              onClick={() => setActiveEditorTab(activeEditorTab === 'settings' ? 'code' : 'settings')}
+            >
+              <Settings size={21} />
+            </button>
+          </div>
         </nav>
+
+        <AccountMenu
+          open={accountMenuOpen}
+          user={githubUser}
+          onSignIn={handleGithubSignIn}
+          onSignOut={handleGithubSignOut}
+          onClose={() => setAccountMenuOpen(false)}
+        />
+
+        <GithubSignInDialog
+          open={githubSignInOpen}
+          backendUrl={backendUrl}
+          clientId={githubClientId}
+          onSuccess={handleGithubSignInSuccess}
+          onClose={() => setGithubSignInOpen(false)}
+        />
 
         {/* Sidebar */}
         {sidebarOpen && activeTab === 'explorer' && (
@@ -171,10 +315,13 @@ export default function HomePage() {
             selectedFile={selectedFile}
             onSelectFile={onSelectFile}
             onUpload={handleUpload}
+            onCloneFromGithub={handleCloneFromGithub}
+            isGithubSignedIn={!!githubUser}
             hasProject={hasProject}
             width={sidebarWidth}
             modernFileTree={modernFileTree}
             modernFolderBasename={modernFolderBasename}
+            onNewProject={newProjectBlocked ? undefined : handleStartNewProject}
           />
         )}
         {sidebarOpen && activeTab === 'search' && (
@@ -187,33 +334,41 @@ export default function HomePage() {
         )}
         {sidebarOpen && <div className="sash-vertical" onMouseDown={startResizeSidebar} />}
 
-        {/* Editor Area */}
-        {activeEditorTab === 'settings' ? (
-          <SettingsTab
-            onSettingsSaved={handleSettingsSaved}
-            onClose={() => setActiveEditorTab('code')}
-            settingsTrigger={settingsTrigger}
-          />
-        ) : activeEditorTab === 'aiconfig' ? (
-          <AIConfigTab
-            onClose={() => setActiveEditorTab('code')}
-            onSettingsSaved={handleSettingsSaved}
-            settingsTrigger={settingsTrigger}
-            tokenUsage={tokenUsage ?? undefined}
-            backendUrl={backendUrl}
-            isRunning={isRunning}
-            sessionId={sessionId}
-          />
-        ) : (
-          <CodeViewer
-            legacyCode={legacyCode}
-            modernCode={modernCode}
-            legacyFile={selectedFile}
-            modernFile={selectedFile ?? null}
-            onClose={clearSelectedFile}
-            onDownload={handleDownload}
-          />
-        )}
+        {/* Editor column — Terminal docks only under this area (like VS Code/Theia),
+            never under the Explorer or Operational Panel, which stay full height. */}
+        <div className="editor-column">
+          {activeEditorTab === 'settings' ? (
+            <SettingsTab
+              onSettingsSaved={handleSettingsSaved}
+              onClose={() => setActiveEditorTab('code')}
+              settingsTrigger={settingsTrigger}
+            />
+          ) : activeEditorTab === 'aiconfig' ? (
+            <AIConfigTab
+              onClose={() => setActiveEditorTab('code')}
+              onSettingsSaved={handleSettingsSaved}
+              settingsTrigger={settingsTrigger}
+              tokenUsage={tokenUsage ?? undefined}
+              backendUrl={backendUrl}
+              sessionId={sessionId}
+            />
+          ) : (
+            <CodeViewer
+              legacyCode={legacyCode}
+              modernCode={modernCode}
+              legacyFile={selectedFile}
+              modernFile={selectedFile ?? null}
+              onClose={clearSelectedFile}
+              onDownload={handleDownload}
+            />
+          )}
+
+          {/* Terminal Sash */}
+          <div className="sash-horizontal" onMouseDown={startResizeTerminal} />
+
+          {/* Terminal */}
+          <TerminalPanel logs={logs} isRunning={isRunning} height={terminalHeight} />
+        </div>
 
         {/* Right Panel — AI Pipeline — always visible when toggled, even alongside AIConfig */}
         {aiPanelOpen && (
@@ -232,9 +387,25 @@ export default function HomePage() {
               onStart={handleStart}
               onStop={handleStop}
               onPause={handlePause}
+              graphResolutionSummary={graphResolutionSummary}
+              isCheckpointBusy={isCheckpointBusy}
+              onContinueAnalysis={handleContinueAnalysis}
+              onSkipToStage2={handleSkipToStage2}
+              lastEventAt={lastEventAt}
+              runStartedAt={runStartedAt}
+              phaseDurations={phaseDurations}
+              onReconnect={reconnect}
               settingsTrigger={settingsTrigger}
               onSettingsSaved={handleSettingsSaved}
               width={aiPanelWidth}
+              migrationTaskList={migrationTaskList}
+              ruleCoverageReport={ruleCoverageReport}
+              isPlanning={isPlanning}
+              onStartMigration={handleStartMigrationPlanning}
+              isGenerating={isGenerating}
+              onStartGeneration={handleStartCodeGeneration}
+              isVerifying={isVerifying}
+              onStartVerification={handleStartVerification}
             />
           </>
         )}
@@ -242,12 +413,6 @@ export default function HomePage() {
         {/* Auto-open AI Panel when pipeline icon clicked while on aiconfig tab */}
 
       </div>
-
-      {/* Terminal Sash */}
-      <div className="sash-horizontal" onMouseDown={startResizeTerminal} />
-
-      {/* Terminal */}
-      <TerminalPanel logs={logs} isRunning={isRunning} height={terminalHeight} />
 
       {/* Status Bar */}
       <footer className="status-bar">

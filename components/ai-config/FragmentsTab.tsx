@@ -1,18 +1,9 @@
-// =============================================================================
-//  components/ai-config/FragmentsTab.tsx
-//  AIConfig sub-tab: Editable prompt fragment (save/reset).
-//
-//  Only ONE fragment ID is actually read by the backend today:
-//  'system-agent-rules' (see SNS_Code_Migration_BE planner-agent.ts,
-//  CUSTOM_RULES_FRAGMENT_ID). It is appended as a <custom_rules> block to
-//  every agent's system prompt for the session. Two other fragment IDs
-//  ('validation-rules-strict', 'scanner-stack-detect') used to be listed
-//  here but the backend never reads them — editing/saving them did nothing,
-//  so they were removed rather than left as non-functional UI.
-// =============================================================================
+// Only 'system-agent-rules' is actually read by the backend (appended to every agent's
+// system prompt) — other fragment IDs were removed since editing them did nothing.
 'use client';
 
 import { useState } from 'react';
+import { X, Check, Pencil } from 'lucide-react';
 
 const FRAGMENT_ID    = 'system-agent-rules';
 const FRAGMENT_TITLE = 'system-agent-rules';
@@ -54,7 +45,7 @@ export default function FragmentsTab() {
       </p>
 
       <div style={{
-        background: 'rgba(30,30,30,0.3)',
+        background: 'var(--bg-tertiary)',
         border: `1px solid ${isCustom ? 'rgba(78,201,176,0.3)' : 'var(--border-color)'}`,
         borderRadius: '6px', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px'
       }}>
@@ -72,17 +63,17 @@ export default function FragmentsTab() {
           </div>
           <div style={{ display: 'flex', gap: '6px' }}>
             {isCustom && !editing && (
-              <button className="list-item-delete-btn" style={{ padding: '4px', fontSize: '10px' }} onClick={reset}>✕ Reset</button>
+              <button className="list-item-delete-btn" style={{ padding: '4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={reset}><X size={11} /> Reset</button>
             )}
             <button
               className="list-item-delete-btn"
-              style={{ padding: '4px', fontSize: '10px', color: editing ? 'var(--text-success)' : undefined }}
+              style={{ padding: '4px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', color: editing ? 'var(--text-success)' : undefined }}
               onClick={() => {
                 if (editing) save();
                 else { setDraft(text); setEditing(true); }
               }}
             >
-              {editing ? '✓ Save' : '✏️ Edit'}
+              {editing ? <><Check size={11} /> Save</> : <><Pencil size={11} /> Edit</>}
             </button>
           </div>
         </div>
@@ -92,10 +83,10 @@ export default function FragmentsTab() {
             value={draft ?? ''}
             onChange={e => setDraft(e.target.value)}
             placeholder="e.g. Always prefer async/await over callbacks. Never remove existing comments."
-            style={{ width: '100%', minHeight: '120px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '11px', padding: '8px', resize: 'vertical', boxSizing: 'border-box' }}
+            style={{ width: '100%', minHeight: '120px', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '11px', padding: '8px', resize: 'vertical', boxSizing: 'border-box' }}
           />
         ) : (
-          <div style={{ fontSize: '11px', color: text ? 'var(--text-secondary)' : 'var(--text-muted)' }}>
+          <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
             {text || '— empty, no custom rules applied —'}
           </div>
         )}

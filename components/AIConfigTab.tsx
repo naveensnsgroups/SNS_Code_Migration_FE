@@ -1,21 +1,11 @@
-// =============================================================================
-//  components/AIConfigTab.tsx
-//
-//  Orchestrator for the AI Configuration panel.
-//  All agent and tool data is fetched from the backend at runtime — NO hardcoded
-//  mock data. Sub-tab panels are independent, focused components.
-//
-//  Real data endpoints:
-//   GET /api/config/agents  → AgentsTab
-//   GET /api/config/tools   → ToolsTab
-//   GET /api/mcp/status     → McpTab
-// =============================================================================
+// Orchestrator for the AI Configuration panel — all agent/tool data is fetched from the backend at runtime.
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Layers, Coins, Bookmark, Wrench, Award, Link, Database, Bot } from 'lucide-react';
+import { Users, Layers, Coins, Bookmark, Wrench, Award, Link, Database, Bot, AlertCircle, X } from 'lucide-react';
 import { fetchAgents, fetchTools, type AgentDto, type ToolDto } from '@/services/api';
 import { getAllDefaultModelOptions, getDefaultAliases } from '@/constants/models';
+import { useNotifications } from '@/context/NotificationContext';
 import type { TokenUsage } from '@/hooks/useMigration';
 import AgentsTab   from '@/components/ai-config/AgentsTab';
 import VariablesTab from '@/components/ai-config/VariablesTab';
@@ -62,8 +52,7 @@ interface Props {
   onSettingsSaved?: () => void;
   settingsTrigger?: number;
   tokenUsage?: TokenUsage;
-  backendUrl?: string;
-  isRunning?: boolean;
+  backendUrl: string;
   sessionId?: string | null;
 }
 
@@ -74,11 +63,11 @@ export default function AIConfigTab({
   onSettingsSaved,
   settingsTrigger = 0,
   tokenUsage,
-  backendUrl = 'http://localhost:4000',
-  isRunning = false,
+  backendUrl,
   sessionId,
 }: Props) {
   const [activeSubTab,     setActiveSubTab]     = useState<SubTab>('agents');
+  const { notify } = useNotifications();
 
   // ── Real data from backend ─────────────────────────────────────────────────
   const [agents,           setAgents]           = useState<AgentDto[]>([]);
@@ -167,20 +156,38 @@ export default function AIConfigTab({
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleToggleAgent = useCallback((agentId: string) => {
     const saved = localStorage.getItem('ai_config_agents');
-    const overrides: Record<string, { enabled: boolean }> = saved ? JSON.parse(saved) : {};
+    const overrides: Record<string, { enabled?: boolean; selectedModel?: string }> = saved ? JSON.parse(saved) : {};
     const currentEnabled = overrides[agentId]?.enabled !== false;
-    overrides[agentId] = { enabled: !currentEnabled };
+    // Spread the existing entry — a bare `{ enabled }` here would silently wipe out
+    // that agent's selectedModel override the next time it was toggled.
+    overrides[agentId] = { ...(overrides[agentId] || {}), enabled: !currentEnabled };
     localStorage.setItem('ai_config_agents', JSON.stringify(overrides));
     onSettingsSaved?.();
-  }, [onSettingsSaved]);
+    const agentName = agents.find(a => a.id === agentId)?.name ?? agentId;
+    notify({ type: currentEnabled ? 'info' : 'success', message: `${agentName} ${currentEnabled ? 'disabled' : 'enabled'}` });
+  }, [onSettingsSaved, agents, notify]);
 
   const handleUpdateModel = useCallback((agentId: string, model: string) => {
     const saved = localStorage.getItem('ai_config_agents');
-    const overrides: Record<string, { selectedModel?: string }> = saved ? JSON.parse(saved) : {};
-    overrides[agentId] = { ...(overrides[agentId] || {}), selectedModel: model };
+    const overrides: Record<string, { enabled?: boolean; selectedModel?: string }> = saved ? JSON.parse(saved) : {};
+    if (model) {
+      overrides[agentId] = { ...(overrides[agentId] || {}), selectedModel: model };
+    } else {
+      // "" means "Use alias default" — clear the override instead of saving an
+      // empty string, otherwise there is no way back to the alias once a model
+      // has been picked (the dropdown always re-shows the last real override).
+      const { selectedModel, ...rest } = overrides[agentId] || {};
+      if (Object.keys(rest).length > 0) overrides[agentId] = rest;
+      else delete overrides[agentId];
+    }
     localStorage.setItem('ai_config_agents', JSON.stringify(overrides));
     onSettingsSaved?.();
-  }, [onSettingsSaved]);
+    const agentName = agents.find(a => a.id === agentId)?.name ?? agentId;
+    notify({
+      type: 'success',
+      message: model ? `${agentName} model override set to ${model}` : `${agentName} reverted to alias default`,
+    });
+  }, [onSettingsSaved, agents, notify]);
 
   const handleToolToggle = useCallback((toolId: string) => {
     setToolsEnabled(prev => {
@@ -197,7 +204,8 @@ export default function AIConfigTab({
       localStorage.setItem('ai_config_aliases', JSON.stringify(updated));
       return updated;
     });
-  }, []);
+    notify({ type: 'success', message: `${key} alias set to ${value}` });
+  }, [notify]);
 
   // ── Merge agent state with localStorage overrides ─────────────────────────
   const agentsSaved = (() => {
@@ -207,7 +215,12 @@ export default function AIConfigTab({
   const mergedAgents = agents.map(a => ({
     ...a,
     enabled:       agentsSaved[a.id]?.enabled !== false,
-    selectedModel: agentsSaved[a.id]?.selectedModel ?? (a.languageModelRequirements[0]?.identifier ?? ''),
+    // The backend alias identifier (e.g. "alias:fast-model") — always this, never the
+    // override, so the "Backend alias" box in AgentsTab keeps meaning what it says.
+    selectedModel: a.languageModelRequirements[0]?.identifier ?? '',
+    // The raw per-agent override, if any — "" means none set (falls back to the alias
+    // above). Drives the Override Model dropdown as a controlled value.
+    overrideModel: agentsSaved[a.id]?.selectedModel ?? '',
     hasChat:       a.tags.includes('planner') || a.tags.includes('writer'),
     systemTemplate: a.prompts[0]?.variant ?? `${a.id}-system-default`,
     tags:          a.tags ?? [],
@@ -222,7 +235,7 @@ export default function AIConfigTab({
           <Bot size={15} style={{ color: 'var(--accent-blue)' }} />
           <span className="settings-title">AI Configuration</span>
           {onClose && (
-            <button className="settings-close" onClick={onClose} title="Close Panel">✕</button>
+            <button className="settings-close" onClick={onClose} title="Close Panel"><X size={13} /></button>
           )}
         </div>
       </div>
@@ -248,7 +261,7 @@ export default function AIConfigTab({
           agentsLoading ? (
             <div style={{ padding: '24px', fontSize: '13px', color: 'var(--text-muted)' }}>Loading agents from backend…</div>
           ) : agentsError ? (
-            <div style={{ padding: '24px', fontSize: '13px', color: 'var(--text-error)' }}>⚠ {agentsError}</div>
+            <div style={{ padding: '24px', fontSize: '13px', color: 'var(--text-error)', display: 'flex', alignItems: 'center', gap: '6px' }}><AlertCircle size={14} /> {agentsError}</div>
           ) : (
             <AgentsTab
               agents={mergedAgents}
@@ -263,7 +276,7 @@ export default function AIConfigTab({
 
         {activeSubTab === 'variables'  && <VariablesTab />}
         {activeSubTab === 'mcp'        && <McpTab servers={mcpServers} loading={mcpLoading} onRefresh={refreshMcp} />}
-        {activeSubTab === 'tokens'     && <TokensTab tokenUsage={tokenUsage} isRunning={isRunning} sessionId={sessionId} />}
+        {activeSubTab === 'tokens'     && <TokensTab tokenUsage={tokenUsage} sessionId={sessionId} backendUrl={backendUrl} />}
         {activeSubTab === 'fragments'  && <FragmentsTab />}
 
         {activeSubTab === 'tools' && (

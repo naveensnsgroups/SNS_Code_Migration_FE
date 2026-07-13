@@ -1,8 +1,4 @@
-// =============================================================================
-//  components/ai-config/McpTab.tsx
-//  MCP Servers tab — shows live status, tools per server, connect/disconnect.
-//  Data comes from GET /api/mcp/status (real backend detection).
-// =============================================================================
+// MCP Servers tab — live status and tools per server, from real backend detection.
 'use client';
 
 import { useState } from 'react';
@@ -29,7 +25,7 @@ function ServerRow({ server }: { server: MCPServer }) {
 
   return (
     <div style={{
-      background: 'rgba(30,30,30,0.4)',
+      background: 'var(--bg-tertiary)',
       border: `1px solid ${isConnected ? 'rgba(78,201,176,0.25)' : 'var(--border-color)'}`,
       borderRadius: '6px', overflow: 'hidden'
     }}>
@@ -48,10 +44,10 @@ function ServerRow({ server }: { server: MCPServer }) {
         <Server size={13} style={{ color: isConnected ? 'var(--text-info)' : 'var(--text-muted)', flexShrink: 0 }} />
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: '12px', fontWeight: 600, color: isConnected ? 'var(--text-primary)' : 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: isConnected ? 'var(--text-primary)' : 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {server.name}
           </div>
-          <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '1px' }}>
+          <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
             {server.description}
           </div>
         </div>
@@ -66,7 +62,7 @@ function ServerRow({ server }: { server: MCPServer }) {
             {isConnected ? 'Connected' : 'Disconnected'}
           </span>
           {server.tools.length > 0 && (
-            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{server.tools.length} tools</span>
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{server.tools.length} tools</span>
           )}
           {expanded
             ? <ChevronDown size={12} style={{ color: 'var(--text-muted)' }} />
@@ -76,23 +72,23 @@ function ServerRow({ server }: { server: MCPServer }) {
 
       {/* Expanded tools list */}
       {expanded && (
-        <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '10px 12px', background: 'rgba(0,0,0,0.15)' }}>
+        <div style={{ borderTop: '1px solid var(--border-subtle)', padding: '10px 12px', background: 'var(--bg-primary)' }}>
           {server.version && (
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '8px', fontFamily: 'var(--font-mono)' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '8px', fontFamily: 'var(--font-mono)' }}>
               Version: {server.version}
             </div>
           )}
 
           {server.tools.length > 0 ? (
             <div>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px', fontWeight: 700 }}>
+              <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px', fontWeight: 700 }}>
                 Registered Tools
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
                 {server.tools.map(tool => (
                   <span key={tool} style={{
                     fontSize: '10px', padding: '2px 7px', borderRadius: '3px',
-                    background: 'rgba(30,30,30,0.6)', border: '1px solid var(--border-color)',
+                    background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)',
                     fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)'
                   }}>
                     {tool}
@@ -101,7 +97,7 @@ function ServerRow({ server }: { server: MCPServer }) {
               </div>
             </div>
           ) : (
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>No tools exposed by this server.</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>No tools exposed by this server.</div>
           )}
 
           {/* Connect / Disconnect — the backend only reports MCP status today
@@ -115,7 +111,7 @@ function ServerRow({ server }: { server: MCPServer }) {
               marginTop: '10px', display: 'flex', alignItems: 'center', gap: '5px',
               padding: '4px 12px', borderRadius: '4px', fontSize: '11px', cursor: 'not-allowed', border: 'none',
               background: 'rgba(120,120,120,0.1)',
-              color: 'var(--text-muted)',
+              color: 'var(--text-secondary)',
               opacity: 0.6,
             }}
             onClick={e => e.stopPropagation()}
@@ -139,7 +135,7 @@ export default function McpTab({ servers, loading, onRefresh }: Props) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h3 style={{ fontSize: '14px', fontWeight: 600 }}>MCP Servers</h3>
-          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+          <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
             <span style={{ color: 'var(--text-success)' }}>●</span> {connected} connected
             &nbsp;&nbsp;
             <span style={{ color: 'var(--text-error)' }}>●</span> {disconnected} disconnected
@@ -160,12 +156,12 @@ export default function McpTab({ servers, loading, onRefresh }: Props) {
       </p>
 
       {loading ? (
-        <div style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '20px', textAlign: 'center' }}>
+        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', padding: '20px', textAlign: 'center' }}>
           <RefreshCw size={16} className="spin" style={{ marginBottom: '8px' }} />
           <br />Checking server status…
         </div>
       ) : servers.length === 0 ? (
-        <div style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '20px', textAlign: 'center' }}>
+        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', padding: '20px', textAlign: 'center' }}>
           No MCP servers detected. Ensure backend is running.
         </div>
       ) : (

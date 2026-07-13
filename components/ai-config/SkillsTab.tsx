@@ -1,19 +1,9 @@
-// =============================================================================
-//  components/ai-config/SkillsTab.tsx
-//
-//  Skills tab — fetches REAL skill files from GET /api/config/skills.
-//  Backend reads the /skills directory and parses SKILL.md YAML frontmatter.
-//  No mock data. No hardcoded skill IDs.
-//
-//  SNS IDE concept:
-//    Skills = reusable instruction files in .prompts/skills/<name>/SKILL.md
-//    Each SKILL.md has YAML frontmatter (name, description) + markdown content.
-//    Agents call getSkillFileContent(skillPath) to inject them into prompts.
-// =============================================================================
+// Fetches real skill files from GET /api/config/skills — backend reads the /skills
+// directory and parses SKILL.md YAML frontmatter. No mock data, no hardcoded IDs.
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Award, RefreshCw, FileText, Eye, EyeOff } from 'lucide-react';
+import { Award, RefreshCw, FileText, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 interface SkillFile {
   id:          string;
@@ -24,10 +14,10 @@ interface SkillFile {
 }
 
 interface Props {
-  backendUrl?: string;
+  backendUrl: string;
 }
 
-export default function SkillsTab({ backendUrl = 'http://localhost:4000' }: Props) {
+export default function SkillsTab({ backendUrl }: Props) {
   const [skills,    setSkills]    = useState<SkillFile[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState<string | null>(null);
@@ -87,12 +77,12 @@ export default function SkillsTab({ backendUrl = 'http://localhost:4000' }: Prop
             <Award size={14} style={{ color: 'var(--accent-yellow)' }} />
             <h3 style={{ fontSize: '14px', fontWeight: 600 }}>Skills</h3>
             {!loading && (
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
                 {skills.length} {skills.length === 1 ? 'skill' : 'skills'} registered
               </span>
             )}
           </div>
-          <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', maxWidth: '500px' }}>
+          <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '500px' }}>
             Skills are <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-info)' }}>SKILL.md</code> files in{' '}
             <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-info)' }}>skills/&lt;name&gt;/</code>.
             Agents inject them via{' '}
@@ -115,22 +105,22 @@ export default function SkillsTab({ backendUrl = 'http://localhost:4000' }: Prop
 
       {/* Body */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)', fontSize: '12px' }}>
+        <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text-secondary)', fontSize: '12px' }}>
           <RefreshCw size={16} style={{ animation: 'spin 1s linear infinite', marginBottom: '8px', display: 'block', margin: '0 auto 8px' }} />
           Reading skills directory…
         </div>
       ) : error ? (
         <div style={{ background: 'rgba(244,135,113,0.08)', border: '1px solid rgba(244,135,113,0.3)', borderRadius: '6px', padding: '12px', fontSize: '12px', color: 'var(--text-error)' }}>
-          ⚠ Could not load skills: {error}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><AlertCircle size={13} /> Could not load skills: {error}</span>
           <br />
-          <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
+          <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>
             Ensure the backend is running and <code style={{ fontFamily: 'var(--font-mono)' }}>skills/</code> directory exists.
           </span>
         </div>
       ) : skills.length === 0 ? (
         <div style={{
           border: '1px dashed var(--border-color)', borderRadius: '6px',
-          padding: '30px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px'
+          padding: '30px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px'
         }}>
           <Award size={24} style={{ opacity: 0.3, display: 'block', margin: '0 auto 10px' }} />
           <div style={{ fontWeight: 600, marginBottom: '6px' }}>No skills found</div>
@@ -142,7 +132,7 @@ export default function SkillsTab({ backendUrl = 'http://localhost:4000' }: Prop
             <div
               key={skill.id}
               style={{
-                background: 'rgba(30,30,30,0.35)',
+                background: 'var(--bg-tertiary)',
                 border: `1px solid ${previewId === skill.id ? 'rgba(0,122,204,0.4)' : 'var(--border-color)'}`,
                 borderRadius: '6px', overflow: 'hidden',
                 transition: 'border-color 0.2s',
@@ -162,10 +152,10 @@ export default function SkillsTab({ backendUrl = 'http://localhost:4000' }: Prop
                     </div>
                   )}
                   <div style={{ display: 'flex', gap: '12px', marginTop: '3px' }}>
-                    <code style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                    <code style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
                       {skill.path}
                     </code>
-                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
                       {(skill.sizeBytes / 1024).toFixed(1)} KB
                     </span>
                   </div>
@@ -178,7 +168,7 @@ export default function SkillsTab({ backendUrl = 'http://localhost:4000' }: Prop
                     background: previewId === skill.id ? 'rgba(0,122,204,0.15)' : 'none',
                     border: '1px solid var(--border-color)', borderRadius: '4px',
                     padding: '4px 8px', cursor: 'pointer',
-                    color: previewId === skill.id ? 'var(--accent-blue)' : 'var(--text-muted)',
+                    color: previewId === skill.id ? 'var(--accent-blue)' : 'var(--text-secondary)',
                     display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px',
                     transition: 'all 0.15s', flexShrink: 0,
                   }}
@@ -190,9 +180,9 @@ export default function SkillsTab({ backendUrl = 'http://localhost:4000' }: Prop
 
               {/* Expandable preview pane */}
               {previewId === skill.id && (
-                <div style={{ borderTop: '1px solid var(--border-subtle)', background: 'rgba(0,0,0,0.2)' }}>
+                <div style={{ borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-primary)' }}>
                   {previewLoading ? (
-                    <div style={{ padding: '12px', fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center' }}>
+                    <div style={{ padding: '12px', fontSize: '11px', color: 'var(--text-secondary)', textAlign: 'center' }}>
                       Loading…
                     </div>
                   ) : (

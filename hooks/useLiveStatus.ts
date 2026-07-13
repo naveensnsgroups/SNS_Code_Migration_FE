@@ -1,15 +1,5 @@
-// =============================================================================
-//  hooks/useLiveStatus.ts
-//
-//  Real-time Live Status hook.
-//  Derives session info from logs[]; activeTool comes DIRECTLY from SSE state
-//  (useMigration.activeTool) — no log parsing for tool calls.
-//
-//  Performance: only scans last 150 logs for derived state.
-//               All logs scanned for alerts (to catch old errors).
-//
-//  Returns LiveStatusData — consumed by LiveStatusOverlay.
-// =============================================================================
+// Derives session info from logs[]; activeTool comes directly from SSE state, no log
+// parsing. Only scans the last 150 logs for derived state (all logs for alerts).
 
 'use client';
 

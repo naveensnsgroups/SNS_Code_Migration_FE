@@ -1,14 +1,15 @@
-// =============================================================================
-//  components/ai-panel/TargetConfig.tsx
-//  Target stack inputs — user types their own target framework, database,
-//  language, and test framework. NO hardcoded option arrays.
+// Target stack inputs — free-text, no hardcoded option arrays. Persisted to
+// localStorage on every keystroke, sent to the backend on Start.
 //
-//  User input is persisted to localStorage on every keystroke and sent
-//  to the backend as part of the TargetStack payload on Start.
-// =============================================================================
+// Locking: once a migration plan exists, these values have already been
+// "consumed" by that plan (and possibly by generated code). Leaving them freely
+// editable afterward would let the displayed config silently drift out of sync
+// with what's actually on disk. So past that point the fields go read-only,
+// with an explicit Edit / Cancel affordance — the same pattern any settings
+// form uses — rather than a permanent, unexplained lock.
 'use client';
 
-import { Terminal } from 'lucide-react';
+import { Terminal, Pencil, X, Loader2 } from 'lucide-react';
 import type { DetectedStack } from '@/types';
 
 interface Props {
@@ -17,7 +18,14 @@ interface Props {
   targetDb:          string;
   targetLang:        string;
   testFramework:     string;
-  disabled:          boolean;
+  /** A migration plan already exists — switches the section into locked/edit-explicitly mode. */
+  hasPlan:           boolean;
+  /** A Stage-2 sub-stage is actively running — fields are never editable regardless of hasPlan/locked. */
+  isBusy:            boolean;
+  /** Computed lock state: isBusy || (hasPlan && not explicitly unlocked). */
+  locked:            boolean;
+  onRequestEdit:     () => void;
+  onCancelEdit:      () => void;
   onFrameworkChange: (v: string) => void;
   onDbChange:        (v: string) => void;
   onLangChange:      (v: string) => void;
@@ -59,53 +67,106 @@ function InputRow({ label, id, value, placeholder, disabled, hint, onChange }: I
 
 export default function TargetConfig({
   detectedStack, targetFramework, targetDb, targetLang, testFramework,
-  disabled, onFrameworkChange, onDbChange, onLangChange, onTestChange,
+  hasPlan, isBusy, locked,
+  onRequestEdit, onCancelEdit,
+  onFrameworkChange, onDbChange, onLangChange, onTestChange,
 }: Props) {
+  // Only meaningful once a plan exists to protect — before that, fields are
+  // always plainly editable and no lock UI is shown at all.
+  const showEditButton  = hasPlan && !isBusy && locked;
+  const showCancelButton = hasPlan && !isBusy && !locked;
+
   return (
     <div className="ai-section">
-      <div className="ai-section__title">
-        <Terminal size={12} />
-        <span>Target Configuration</span>
+      <div className="target-config__header">
+        <div className="ai-section__title" style={{ marginBottom: 0 }}>
+          <Terminal size={12} />
+          <span>Target Configuration</span>
+        </div>
+
+        {isBusy && (
+          <span className="target-config__status target-config__status--busy">
+            <Loader2 size={11} className="spin" /> Running
+          </span>
+        )}
+        {showEditButton && (
+          <button
+            type="button"
+            className="target-config__edit-btn"
+            onClick={onRequestEdit}
+            title="Edit target configuration — this will require re-running Migration Planning"
+          >
+            <Pencil size={11} /> Edit
+          </button>
+        )}
+        {showCancelButton && (
+          <button
+            type="button"
+            className="target-config__cancel-btn"
+            onClick={onCancelEdit}
+            title="Discard changes and restore the values the current plan was built with"
+          >
+            <X size={11} /> Cancel
+          </button>
+        )}
       </div>
 
-      <InputRow
-        id="target-framework"
-        label="Target Framework"
-        value={targetFramework}
-        placeholder="e.g. NestJS, FastAPI, Quarkus…"
-        hint={detectedStack.framework}
-        disabled={disabled}
-        onChange={onFrameworkChange}
-      />
+      {/* Once locked, the form itself adds nothing over a one-line summary — so
+          it collapses entirely and only re-expands when the user asks to Edit. */}
+      {hasPlan && locked && !isBusy && (
+        <div className="target-config__summary">
+          {[targetFramework, targetDb, targetLang, testFramework].filter(Boolean).join(' · ') || 'No values set'}
+        </div>
+      )}
 
-      <InputRow
-        id="target-database"
-        label="Target Database"
-        value={targetDb}
-        placeholder="e.g. PostgreSQL, MongoDB, SQLite…"
-        hint={detectedStack.database}
-        disabled={disabled}
-        onChange={onDbChange}
-      />
+      {(!hasPlan || !locked || isBusy) && (
+        <>
+          {hasPlan && !locked && !isBusy && (
+            <div className="target-config__hint target-config__hint--editing">
+              Editing — changes only take effect after you click Re-plan Migration below.
+            </div>
+          )}
 
-      <InputRow
-        id="target-language"
-        label="Target Language"
-        value={targetLang}
-        placeholder="e.g. TypeScript, Python 3, Java 21…"
-        hint={detectedStack.language}
-        disabled={disabled}
-        onChange={onLangChange}
-      />
+          <InputRow
+            id="target-framework"
+            label="Target Framework"
+            value={targetFramework}
+            placeholder="e.g. NestJS, FastAPI, Quarkus…"
+            hint={detectedStack.framework}
+            disabled={locked}
+            onChange={onFrameworkChange}
+          />
 
-      <InputRow
-        id="target-test-framework"
-        label="Testing Framework"
-        value={testFramework}
-        placeholder="e.g. vitest, jest, pytest, junit…"
-        disabled={disabled}
-        onChange={onTestChange}
-      />
+          <InputRow
+            id="target-database"
+            label="Target Database"
+            value={targetDb}
+            placeholder="e.g. PostgreSQL, MongoDB, SQLite…"
+            hint={detectedStack.database}
+            disabled={locked}
+            onChange={onDbChange}
+          />
+
+          <InputRow
+            id="target-language"
+            label="Target Language"
+            value={targetLang}
+            placeholder="e.g. TypeScript, Python 3, Java 21…"
+            hint={detectedStack.language}
+            disabled={locked}
+            onChange={onLangChange}
+          />
+
+          <InputRow
+            id="target-test-framework"
+            label="Testing Framework"
+            value={testFramework}
+            placeholder="e.g. vitest, jest, pytest, junit…"
+            disabled={locked}
+            onChange={onTestChange}
+          />
+        </>
+      )}
     </div>
   );
 }

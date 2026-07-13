@@ -1,8 +1,7 @@
-// =============================================================================
-//  components/ai-config/AliasesTab.tsx
-//  AIConfig sub-tab: Model alias mapping (reasoning/fast/chat-model)
-// =============================================================================
+// Model alias mapping (reasoning/fast/chat-model).
 'use client';
+
+import { Check } from 'lucide-react';
 
 const ALIAS_DEFS = [
   { key: 'reasoning-model', label: 'reasoning-model (Default)', desc: 'Used by Planner + Analyzer agents for deep analysis.' },
@@ -12,9 +11,7 @@ const ALIAS_DEFS = [
 
 interface Props {
   aliases: Record<string, string>;
-  /** The SAME model list computed in AIConfigTab (user's custom models if set,
-   *  otherwise the shared default seed list) — keeps this dropdown from
-   *  drifting out of sync with what the user actually configured in Settings. */
+  /** Same model list computed in AIConfigTab, so this dropdown can't drift out of sync. */
   modelOptions: string[];
   onAliasChange: (key: string, value: string) => void;
 }
@@ -30,9 +27,7 @@ export default function AliasesTab({ aliases, modelOptions, onAliasChange }: Pro
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '500px' }}>
         {ALIAS_DEFS.map(alias => {
           const currentValue = aliases[alias.key] || '';
-          // If the currently-saved value isn't in the live model list (e.g. the
-          // user removed that model from Settings since setting the alias),
-          // still show it so the real saved value is never silently hidden.
+          // Show the saved value even if it's no longer in the live list, never hide it silently.
           const options = currentValue && !modelOptions.includes(currentValue)
             ? [currentValue, ...modelOptions]
             : modelOptions;
@@ -40,7 +35,7 @@ export default function AliasesTab({ aliases, modelOptions, onAliasChange }: Pro
           return (
             <div key={alias.key} className="form-group">
               <label className="form-label">{alias.label}</label>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>{alias.desc}</div>
+              <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginBottom: '4px' }}>{alias.desc}</div>
               <select className="form-select-premium" value={currentValue} onChange={e => onAliasChange(alias.key, e.target.value)}>
                 {options.length === 0 && <option value="">No models configured — add some in Settings</option>}
                 {options.map(model => (
@@ -52,8 +47,8 @@ export default function AliasesTab({ aliases, modelOptions, onAliasChange }: Pro
         })}
       </div>
 
-      <div style={{ fontSize: '11px', color: 'var(--text-success)', marginTop: '4px' }}>
-        ✓ Changes auto-saved to localStorage and applied on next migration start.
+      <div style={{ fontSize: '11px', color: 'var(--text-success)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+        <Check size={12} /> Changes auto-saved to localStorage and applied on next migration start.
       </div>
     </div>
   );

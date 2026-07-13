@@ -123,7 +123,7 @@ export default function SearchPanel({ sessionId, onSelectFile, backendUrl, width
               onClick={() => onSelectFile(match.filePath)}
               style={{
                 cursor: 'pointer',
-                background: 'rgba(30,30,30,0.3)',
+                background: 'var(--bg-tertiary)',
                 border: '1px solid var(--border-color)',
                 borderRadius: '4px',
                 padding: '6px 8px',

@@ -1,23 +1,17 @@
-// =============================================================================
-//  components/ai-config/AgentsTab.tsx
-//  AIConfig sub-tab: Agent list (sidebar) + scrollable detail panel
-//
-//  - Detail pane scrolls independently (overflow-y: auto)
-//  - LLM binding shows the backend alias identifier (alias:fast-model) — not
-//    a raw model name — and lets user override via free-text input
-//  - Variables table and Functions list fully visible with scroll
-// =============================================================================
+// Agent list (sidebar) + scrollable detail panel. LLM binding shows the backend
+// alias identifier (alias:fast-model), not a raw model name.
 'use client';
 
 import { Settings, Layers, Terminal, Cpu, ToggleLeft, ToggleRight, ExternalLink } from 'lucide-react';
 
-export interface AgentConfig {
+interface AgentConfig {
   id: string;
   name: string;
   enabled: boolean;
   hasChat: boolean;
   systemTemplate: string;
   selectedModel: string;         // The backend alias: e.g. "alias:fast-model"
+  overrideModel: string;         // Raw per-agent Override Model pick, "" if none set
   description: string;
   variables: { name: string; desc: string }[];
   functions: string[];
@@ -51,7 +45,7 @@ function SectionBlock({ icon, title, children }: { icon: React.ReactNode; title:
 
 export default function AgentsTab({ agents, selectedAgentId, modelOptions, onSelectAgent, onToggleAgent, onUpdateModel }: Props) {
   const selectedAgent = agents.find(a => a.id === selectedAgentId) || agents[0];
-  if (!selectedAgent) return <div style={{ padding: '20px', color: 'var(--text-muted)', fontSize: '12px' }}>No agents loaded.</div>;
+  if (!selectedAgent) return <div style={{ padding: '20px', color: 'var(--text-secondary)', fontSize: '12px' }}>No agents loaded.</div>;
 
   return (
     <div className="config-agents-grid">
@@ -80,7 +74,7 @@ export default function AgentsTab({ agents, selectedAgentId, modelOptions, onSel
         <div className="agent-details-header">
           <div>
             <h3 className="agent-details-title">{selectedAgent.name}</h3>
-            <div className="agent-details-id" style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+            <div className="agent-details-id" style={{ fontFamily: 'var(--font-mono)', fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>
               Id: {selectedAgent.id}
             </div>
           </div>
@@ -136,7 +130,7 @@ export default function AgentsTab({ agents, selectedAgentId, modelOptions, onSel
                 <ExternalLink size={11} />
               </button>
             </div>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
               Edit prompt content in the <strong>Prompt Fragments</strong> tab
             </div>
           </div>
@@ -147,10 +141,10 @@ export default function AgentsTab({ agents, selectedAgentId, modelOptions, onSel
           <div className="form-group" style={{ maxWidth: '420px' }}>
             <label className="form-label">Language Model Binding</label>
             <div style={{
-              background: 'rgba(30,30,30,0.5)', border: '1px solid var(--border-color)',
+              background: 'var(--bg-primary)', border: '1px solid var(--border-color)',
               borderRadius: '4px', padding: '8px 10px', marginBottom: '6px'
             }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: '4px' }}>Backend alias (from agent-definitions.ts):</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Backend alias (from agent-definitions.ts):</div>
               <code style={{ fontSize: '12px', color: 'var(--text-info)', fontFamily: 'var(--font-mono)' }}>
                 {selectedAgent.selectedModel || 'Not set'}
               </code>
@@ -158,15 +152,22 @@ export default function AgentsTab({ agents, selectedAgentId, modelOptions, onSel
             <label className="form-label" style={{ marginTop: '6px' }}>Override Model (optional)</label>
             <select
               className="form-select-premium"
-              defaultValue=""
-              onChange={e => { if (e.target.value) onUpdateModel(selectedAgent.id, e.target.value); }}
+              value={selectedAgent.overrideModel}
+              onChange={e => onUpdateModel(selectedAgent.id, e.target.value)}
               disabled={!selectedAgent.enabled}
             >
               <option value="">— Use alias default —</option>
+              {/* Show the saved override even if it's fallen out of the live model list,
+                  never hide it silently (same rule AliasesTab follows). */}
+              {selectedAgent.overrideModel && !modelOptions.includes(selectedAgent.overrideModel) && (
+                <option value={selectedAgent.overrideModel}>{selectedAgent.overrideModel}</option>
+              )}
               {modelOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
             </select>
-            <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>
-              Alias → model mapping configured in <strong>Model Aliases</strong> tab
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              {selectedAgent.overrideModel
+                ? <>This override takes priority over the <strong>Model Aliases</strong> mapping above — clear it (— Use alias default —) to go back to following the alias.</>
+                : <>Alias → model mapping configured in <strong>Model Aliases</strong> tab</>}
             </div>
           </div>
         </SectionBlock>
@@ -200,7 +201,7 @@ export default function AgentsTab({ agents, selectedAgentId, modelOptions, onSel
               {selectedAgent.functions.map((fn, i) => (
                 <span key={i} style={{
                   fontSize: '11px', padding: '3px 8px', borderRadius: '4px',
-                  background: 'rgba(30,30,30,0.6)', border: '1px solid var(--border-color)',
+                  background: 'var(--bg-tertiary)', border: '1px solid var(--border-color)',
                   fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)',
                 }}>
                   {fn}
@@ -212,7 +213,7 @@ export default function AgentsTab({ agents, selectedAgentId, modelOptions, onSel
 
         {/* ── Agent Tags ─────────────────────────────────────────────────── */}
         {selectedAgent.functions.length === 0 && selectedAgent.variables.length === 0 && (
-          <div style={{ marginTop: '20px', fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '20px' }}>
+          <div style={{ marginTop: '20px', fontSize: '12px', color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>
             No variables or functions configured for this agent.
           </div>
         )}

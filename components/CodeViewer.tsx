@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
-import { X, Sparkles, Download } from 'lucide-react';
+import { X, Download } from 'lucide-react';
 import { getFileIcon } from '../utils/labelProvider';
+import MonacoCodeBlock from './MonacoCodeBlock';
 
 interface Props {
   legacyCode: string | null;
@@ -13,60 +14,17 @@ interface Props {
   onDownload?: (fileName: string) => void;
 }
 
-function CodeBlock({ code }: { code: string }) {
-  return (
-    <pre style={{
-      margin: 0,
-      padding: '12px 0',
-      fontFamily: 'var(--font-mono)',
-      fontSize: '12px',
-      lineHeight: '1.7',
-      color: 'var(--text-primary)',
-      whiteSpace: 'pre',
-      overflowX: 'auto',
-      overflowY: 'auto',
-      flex: 1,
-    }}>
-      <div style={{ minWidth: 'max-content', padding: '0 16px' }}>
-        {code.split('\n').map((line, i) => (
-          <div key={i} style={{ display: 'flex', gap: '16px' }}>
-            <span style={{ color: 'var(--text-muted)', minWidth: '32px', textAlign: 'right', userSelect: 'none', flexShrink: 0 }}>
-              {i + 1}
-            </span>
-            <span style={{ flex: 1 }}>{highlightLine(line)}</span>
-          </div>
-        ))}
-      </div>
-    </pre>
-  );
-}
-
-function highlightLine(line: string): React.ReactNode {
-  // Simple keyword highlighting
-  const parts = line.split(/(\/\/.*)|('.*?'|".*?"|`.*?`)|\b(const|let|var|function|class|import|export|from|return|async|await|if|else|for|while|try|catch|throw|new|this|typeof|interface|type|extends|implements|public|private|protected|static|readonly)\b|\b(\d+)\b/g);
-
-  return parts.map((part, i) => {
-    if (!part) return null;
-    if (/^\/\//.test(part)) return <span key={i} style={{ color: '#6a9955' }}>{part}</span>;
-    if (/^['"`]/.test(part)) return <span key={i} style={{ color: '#ce9178' }}>{part}</span>;
-    if (/^(const|let|var|function|class|import|export|from|return|async|await|if|else|for|while|try|catch|throw|new|this|typeof|interface|type|extends|implements|public|private|protected|static|readonly)$/.test(part)) {
-      return <span key={i} style={{ color: '#569cd6' }}>{part}</span>;
-    }
-    if (/^\d+$/.test(part)) return <span key={i} style={{ color: '#b5cea8' }}>{part}</span>;
-    return <span key={i}>{part}</span>;
-  });
-}
-
-// 'migration-plan.md' was removed from this list — no current backend pipeline
-// path produces that file (only Stage1_Analysis.md is ever assembled/written;
-// see SNS_Code_Migration_BE section-assembler.ts). Keeping it here made the
-// download button appear for a file that could never actually exist.
+// Only files the backend actually produces — otherwise the download button appears for
+// a file that can never exist.
 const DOWNLOADABLE_FILES = ['Stage1_Analysis.md'];
 
 export default function CodeViewer({ legacyCode, modernCode, legacyFile, modernFile, onClose, onDownload }: Props) {
   const fileName = legacyFile?.split('/').pop() ?? legacyFile ?? '';
   const isDownloadable = DOWNLOADABLE_FILES.includes(fileName) && !!onDownload;
-  if (!legacyCode && !modernCode) {
+  // Use explicit null checks, not truthiness: an empty (0-byte) file has content
+  // '' which is falsy — treating that as "no file" would keep the Welcome screen
+  // up and make empty files impossible to open.
+  if (legacyCode === null && modernCode === null) {
     return (
       <div className="editor-area">
         <div className="editor-tabs">
@@ -74,15 +32,30 @@ export default function CodeViewer({ legacyCode, modernCode, legacyFile, modernF
         </div>
         <div className="editor-content" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="editor-empty" style={{ textAlign: 'center' }}>
-            <img 
-              src="/agent_workbench_logo.png" 
-              alt="Agent Workbench Logo" 
-              style={{ width: '96px', height: '96px', opacity: 0.15, marginBottom: '16px', filter: 'grayscale(20%)' }} 
+            <img
+              src="/agent_workbench_logo.png"
+              alt="Agent Workbench Logo"
+              style={{
+                width: '112px',
+                height: '112px',
+                opacity: 0.95,
+                marginBottom: '20px',
+                filter: 'drop-shadow(0 0 24px rgba(0, 122, 204, 0.35))',
+              }}
             />
-            <div className="editor-empty__text" style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            <div
+              className="editor-empty__text"
+              style={{
+                fontSize: '20px',
+                fontWeight: 700,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                color: 'var(--text-primary)',
+              }}
+            >
               Code Migration Platform
             </div>
-            <div className="editor-empty__sub" style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>
+            <div className="editor-empty__sub" style={{ fontSize: '13px', color: 'var(--text-primary)', opacity: 0.7, marginTop: '8px' }}>
               Select a file from the explorer or configure AI parameters to begin
             </div>
           </div>
@@ -91,12 +64,12 @@ export default function CodeViewer({ legacyCode, modernCode, legacyFile, modernF
     );
   }
 
-  const hasValidLegacy = legacyCode && !legacyCode.startsWith('// Error reading');
+  const hasValidLegacy = legacyCode !== null && !legacyCode.startsWith('// Error reading');
 
   return (
     <div className="editor-area">
       <div className="editor-tabs">
-        {legacyFile && legacyCode && hasValidLegacy && (
+        {legacyFile && hasValidLegacy && (
           <div className="editor-tab active">
             <span className="editor-tab__icon">{getFileIcon(legacyFile)}</span>
             <span className="editor-tab__name">{legacyFile.split('/').pop() ?? legacyFile}</span>
@@ -121,13 +94,12 @@ export default function CodeViewer({ legacyCode, modernCode, legacyFile, modernF
             )}
           </div>
         )}
-        {modernFile && modernCode && (
+        {modernFile && modernCode !== null && (
           <div className="editor-tab active" style={{ borderTopColor: 'var(--text-success)' }}>
-            <span className="editor-tab__icon" style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+            <span className="editor-tab__icon">
               {getFileIcon(modernFile)}
-              <Sparkles size={10} style={{ color: 'var(--text-success)' }} />
             </span>
-            <span className="editor-tab__name">{modernFile.split('/').pop() ?? modernFile} <span style={{ color: 'var(--text-success)', fontSize: '10px' }}>✦ Modern</span></span>
+            <span className="editor-tab__name">{modernFile.split('/').pop() ?? modernFile} <span style={{ color: 'var(--text-success)', fontSize: '10px' }}>Modern</span></span>
             {onClose && (
               <button
                 className="editor-tab__close"
@@ -141,20 +113,20 @@ export default function CodeViewer({ legacyCode, modernCode, legacyFile, modernF
         )}
       </div>
       <div className="editor-content">
-        {legacyCode && hasValidLegacy && (
+        {hasValidLegacy && (
           <div className="editor-pane">
             <div className="editor-pane__label">
               Legacy — {legacyFile}
             </div>
-            <CodeBlock code={legacyCode} />
+            <MonacoCodeBlock code={legacyCode!} fileName={legacyFile} />
           </div>
         )}
-        {modernCode && (
+        {modernCode !== null && (
           <div className={`editor-pane ${hasValidLegacy ? 'editor-pane--split' : ''}`} style={{ flex: 1 }}>
             <div className="editor-pane__label" style={{ color: 'var(--text-success)' }}>
               Modern — {modernFile || legacyFile}
             </div>
-            <CodeBlock code={modernCode} />
+            <MonacoCodeBlock code={modernCode} fileName={modernFile || legacyFile} />
           </div>
         )}
       </div>

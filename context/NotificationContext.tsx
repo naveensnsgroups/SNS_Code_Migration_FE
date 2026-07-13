@@ -1,15 +1,5 @@
-// =============================================================================
-//  context/NotificationContext.tsx
-//
-//  SNS IDE-faithful notification context.
-//  Mirrors: packages/messages/src/browser/notifications-manager.ts
-//
-//  Two stores (exactly like NotificationManager):
-//    toasts   — bottom-right, max 3 visible, auto-dismiss
-//    history  — full list shown in Notification Center (newest first)
-//
-//  visibilityState: 'hidden' | 'toasts' | 'center'  (SNS IDE pattern)
-// =============================================================================
+// Two stores: toasts (bottom-right, max 3, auto-dismiss) and history (full list,
+// shown in Notification Center, newest first).
 'use client';
 
 import {

@@ -1,8 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronRight, FolderOpen } from 'lucide-react';
+import { ChevronRight, FolderOpen, Check, Loader2 } from 'lucide-react';
 import { getFileIcon, getFolderIcon } from '../utils/labelProvider';
+import ConfirmDialog from './ConfirmDialog';
+import GithubCloneDialog from './GithubCloneDialog';
+import GithubLogo from './icons/GithubLogo';
 import type { FileNode } from '@/types';
 
 interface Props {
@@ -10,10 +13,15 @@ interface Props {
   selectedFile: string | null;
   onSelectFile: (path: string, content?: string) => void;
   onUpload: (files: FileList | File[], paths?: string[]) => void;
+  onCloneFromGithub: (repoUrl: string, branch?: string) => Promise<void>;
+  isGithubSignedIn: boolean;
   hasProject: boolean;
   width?: number;
   modernFileTree?: FileNode[];       // Output directory tree from @parcel/watcher refresh
   modernFolderBasename?: string;     // Display name for the output folder (e.g. "Demo-5")
+  /** Undefined while a Stage-2 sub-stage is actively running — the button hides
+   * entirely rather than letting a run be abandoned mid-flight. */
+  onNewProject?: () => void;
 }
 
 function FileItem({
@@ -67,7 +75,7 @@ function FileItem({
         <span className="file-tree__item-icon">{icon}</span>
         <span className="file-tree__item-name">{node.name}</span>
         {node.migrated && (
-          <span style={{ marginLeft: 'auto', color: 'var(--text-success)', fontSize: 10 }}>✓</span>
+          <span style={{ marginLeft: 'auto', color: 'var(--text-success)', display: 'flex' }}><Check size={10} /></span>
         )}
       </div>
       {node.type === 'directory' && open && node.children?.map((child) => (
@@ -77,7 +85,11 @@ function FileItem({
   );
 }
 
-export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, onUpload, hasProject, width, modernFileTree = [], modernFolderBasename }: Props) {
+export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, onUpload, onCloneFromGithub, isGithubSignedIn, hasProject, width, modernFileTree = [], modernFolderBasename, onNewProject }: Props) {
+  const [isUploading, setIsUploading] = useState(false);
+  const [showNewProjectConfirm, setShowNewProjectConfirm] = useState(false);
+  const [showGithubClone, setShowGithubClone] = useState(false);
+
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     const items = e.dataTransfer.items;
@@ -137,40 +149,98 @@ export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, on
     const files = flatFiles.map(f => f.file);
     const paths = flatFiles.map(f => f.path);
 
-    onUpload(files, paths);
+    setIsUploading(true);
+    try {
+      await onUpload(files, paths);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
     <aside className="sidebar" style={{ width: width ? `${width}px` : undefined }}>
-      <div className="sidebar__header">Explorer</div>
+      <div className="sidebar__header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>Explorer</span>
+        {hasProject && onNewProject && (
+          <button
+            type="button"
+            className="sidebar__header-btn"
+            onClick={() => setShowNewProjectConfirm(true)}
+            title="Open a different project — the current session stays saved on the server"
+          >
+            <FolderOpen size={13} />
+          </button>
+        )}
+      </div>
+      <ConfirmDialog
+        open={showNewProjectConfirm}
+        title="Start a new project"
+        message="The current session stays saved on the server, but this tab will stop showing it — you'll need its session id to come back to it."
+        confirmLabel="Start New Project"
+        onConfirm={() => { setShowNewProjectConfirm(false); onNewProject?.(); }}
+        onCancel={() => setShowNewProjectConfirm(false)}
+      />
+      <GithubCloneDialog
+        open={showGithubClone}
+        isSignedIn={isGithubSignedIn}
+        onClone={async (repoUrl, branch) => { await onCloneFromGithub(repoUrl, branch); setShowGithubClone(false); }}
+        onClose={() => setShowGithubClone(false)}
+      />
       <div className="sidebar__content">
         {!hasProject ? (
           <div className="theia-welcome-view">
-            <FolderOpen size={28} className="theia-welcome-icon" style={{ color: '#858585' }} />
-            <p className="theia-welcome-text">You have not yet opened a legacy project folder.</p>
-            <button
-              className="btn-premium btn-premium--primary theia-welcome-btn"
-              onClick={() => {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.webkitdirectory = true;
-                input.multiple = true;
-                input.onchange = (e) => {
-                  const files = (e.target as HTMLInputElement).files;
-                  if (files) onUpload(files);
-                };
-                input.click();
-              }}
-            >
-              Open Folder
-            </button>
-            <div
-              className="theia-welcome-dropzone"
-              onDrop={handleDrop}
-              onDragOver={(e) => e.preventDefault()}
-            >
-              or drag &amp; drop project folder here
-            </div>
+            {isUploading ? (
+              <>
+                <Loader2 size={28} className="spin" style={{ color: 'var(--accent-blue)' }} />
+                <p className="theia-welcome-text">Reading and uploading project files…</p>
+              </>
+            ) : (
+              <>
+                <FolderOpen size={28} className="theia-welcome-icon" style={{ color: 'var(--text-secondary)' }} />
+                <p className="theia-welcome-text">You have not yet opened a legacy project folder.</p>
+                <button
+                  className="btn-premium btn-premium--primary theia-welcome-btn"
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.webkitdirectory = true;
+                    input.multiple = true;
+                    input.onchange = async (e) => {
+                      const files = (e.target as HTMLInputElement).files;
+                      if (!files) return;
+                      setIsUploading(true);
+                      try {
+                        await onUpload(files);
+                      } finally {
+                        setIsUploading(false);
+                      }
+                    };
+                    input.click();
+                  }}
+                >
+                  Open Folder
+                </button>
+                <p style={{ fontSize: '11px', lineHeight: '1.4', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '210px' }}>
+                  Your browser will ask you to confirm folder access — click Upload to continue.
+                </p>
+                <button
+                  className="btn-premium btn-premium--secondary theia-welcome-btn"
+                  style={{ marginTop: '10px', maxWidth: '220px', whiteSpace: 'nowrap' }}
+                  onClick={() => setShowGithubClone(true)}
+                >
+                  <GithubLogo size={16} style={{ marginRight: 7, flexShrink: 0 }} /> Clone from GitHub
+                </button>
+              </>
+            )}
+            {!isUploading && (
+              <div
+                className="theia-welcome-dropzone"
+                onDrop={handleDrop}
+                onDragOver={(e) => e.preventDefault()}
+              >
+                or drag &amp; drop project folder here
+              </div>
+            )}
           </div>
         ) : (
           <div className="file-tree">

@@ -19,8 +19,8 @@
   --accent-purple:   #c586c0;
 
   --text-primary:    #cccccc;
-  --text-secondary:  #858585;
-  --text-muted:      #6a6a6a;
+  --text-secondary:  #9d9d9d;
+  --text-muted:      #757575;
   --text-success:    #4ec9b0;
   --text-error:      #f48771;
   --text-warning:    #cca700;
@@ -29,6 +29,19 @@
 
   --border-color:    #3c3c3c;
   --border-subtle:   #2d2d2d;
+
+  /* Code syntax colors — VS Code "Dark+" token palette (dark_vs.json) */
+  --syntax-comment:  #6a9955;
+  --syntax-string:   #ce9178;
+  --syntax-keyword:  #569cd6;
+  --syntax-number:   #b5cea8;
+
+  /* Activity Bar / Title Bar foreground — pinned white regardless of theme.
+     Matches real VS Code: activityBar.background/foreground stay a fixed dark
+     surface + white text even under the Light theme, they don't follow
+     editor.foreground like the rest of the UI. */
+  --activity-fg:          #ffffff;
+  --activity-fg-inactive: rgba(255,255,255,0.65);
 
   --font-ui:         'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-mono:       'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
@@ -59,10 +72,27 @@
   --text-muted:      #969696;
   --text-white:      #ffffff;
 
+  /* Pastel "Dark+" accents are unreadable on a white canvas — swap in the
+     equivalent VS Code "Light+" accessible tones (same hue, darkened for contrast). */
+  --accent-green:    #098658;
+  --accent-orange:   #bc4c00;
+  --accent-yellow:   #8a6d00;
+  --accent-purple:   #8250df;
+  --text-success:    #098658;
+  --text-error:      #cf222e;
+  --text-warning:    #9a6700;
+  --text-info:       #005fb8;
+
   --border-color:    #d4d4d4;
   --border-subtle:   #ececec;
   --scrollbar-thumb: #cccccc;
   --scrollbar-thumb-hover: #aaaaaa;
+
+  /* Code syntax colors — VS Code "Light+" token palette (light_vs.json) */
+  --syntax-comment:  #008000;
+  --syntax-string:   #a31515;
+  --syntax-keyword:  #0000ff;
+  --syntax-number:   #098658;
 }
 
 /* ── High Contrast Override ──────────────────────────────────────── */
@@ -101,6 +131,12 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
+/* Form controls don't inherit font-family from body by default in any
+   browser — without this, every button/input/select that doesn't set its
+   own font-family falls back to the OS's default UI font instead of Inter. */
+button, input, select, textarea {
+  font-family: inherit;
+}
 
 /* ── Scrollbar ─────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -119,30 +155,72 @@ body {
 
 /* ── Title Bar ─────────────────────────────────────────────────────────── */
 .title-bar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 30px;
+  height: 34px;
+  /* Solid fallback first, then a subtle top-lit gradient for depth on browsers
+     that support color-mix (falls back gracefully otherwise). */
   background: var(--bg-activity);
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--bg-activity) 92%, #ffffff) 0%,
+    var(--bg-activity) 100%);
   border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
   padding: 0 12px;
   flex-shrink: 0;
   user-select: none;
 }
+/* Thin brand accent hairline along the bottom edge */
+.title-bar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg,
+    var(--accent-blue) 0%,
+    var(--accent-green) 45%,
+    transparent 80%);
+  opacity: 0.6;
+  pointer-events: none;
+}
 .title-bar__logo {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary);
+  gap: 9px;
+}
+.title-bar__logo-img {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  filter: drop-shadow(0 0 6px rgba(0, 122, 204, 0.35));
+}
+/* Two-tone wordmark: strong product name + lighter descriptor */
+.title-bar__brand {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-size: 12.5px;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+.title-bar__brand-strong {
+  font-weight: 700;
+  color: var(--activity-fg);
+}
+.title-bar__brand-light {
+  font-weight: 400;
+  color: var(--activity-fg-inactive);
 }
 .title-bar__logo-icon { color: var(--accent-blue); font-size: 16px; }
 .title-bar__actions { display: flex; align-items: center; gap: 6px; }
 .title-bar__btn {
   background: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: var(--activity-fg-inactive);
   padding: 2px 10px;
   font-size: 11px;
   border-radius: 3px;
@@ -150,13 +228,25 @@ body {
   font-family: var(--font-ui);
   transition: all 0.15s;
 }
-.title-bar__btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.title-bar__btn:hover { background: rgba(255,255,255,0.1); color: var(--activity-fg); }
 
 /* ── Main Work Area ────────────────────────────────────────────────────── */
 .work-area {
   display: flex;
   flex: 1;
   overflow: hidden;
+}
+
+/* Wraps the editor area + Terminal so the Terminal panel docks only under
+   this column — matching VS Code/Theia, where the Explorer and the
+   Operational (auxiliary) panel stay full height and are never covered by
+   the Terminal. */
+.editor-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
 }
 
 /* ── Activity Bar ──────────────────────────────────────────────────────── */
@@ -176,7 +266,7 @@ body {
   height: 40px;
   background: transparent;
   border: none;
-  color: var(--text-secondary);
+  color: var(--activity-fg-inactive);
   cursor: pointer;
   border-radius: 4px;
   display: flex;
@@ -185,12 +275,146 @@ body {
   transition: color 0.15s, background 0.15s;
   position: relative;
 }
-.activity-bar__btn:hover { color: var(--text-primary); }
+.activity-bar__btn:hover { color: var(--activity-fg); }
 .activity-bar__btn.active {
-  color: var(--text-primary);
+  color: var(--activity-fg);
   border-left: 2px solid var(--accent-blue);
 }
-.activity-bar__bottom { margin-top: auto; }
+.activity-bar__bottom {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.activity-bar__connected-dot {
+  position: absolute;
+  bottom: 6px;
+  right: 9px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-success);
+  border: 1.5px solid var(--bg-activity);
+}
+
+/* ── Account popover (SNS IDE ACCOUNTS_MENU) ─────────────────────────────── */
+.account-menu {
+  position: fixed;
+  left: calc(var(--activity-width) + 4px);
+  bottom: calc(var(--statusbar-height) + 6px);
+  z-index: 5000;
+  min-width: 230px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.account-menu__header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 4px;
+}
+.account-menu__avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.account-menu__avatar--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-blue);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+.account-menu__id {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.account-menu__name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.account-menu__login {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.account-menu__empty {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 4px 8px 6px;
+}
+.account-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+}
+.account-menu__item:hover { background: var(--bg-hover); }
+.account-menu__item--primary { color: var(--text-info); font-weight: 600; }
+
+/* ── GitHub device-flow code display ─────────────────────────────────────── */
+.github-code-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.github-code {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  text-align: center;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  padding: 10px 12px;
+  user-select: all;
+}
+.github-code__copy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 40px;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.github-code__copy:hover { background: var(--bg-hover); color: var(--text-primary); }
 
 /* ── Sidebar / Explorer ────────────────────────────────────────────────── */
 .sidebar {
@@ -211,6 +435,22 @@ body {
   text-transform: uppercase;
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
+}
+.sidebar__header-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: background 0.15s, color 0.15s;
+}
+.sidebar__header-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-info);
 }
 .sidebar__content { flex: 1; overflow-y: auto; }
 
@@ -234,7 +474,7 @@ body {
   position: relative;
 }
 .file-tree__item:hover { background: var(--bg-hover); }
-.file-tree__item.selected { background: var(--bg-selected); }
+.file-tree__item.selected { background: var(--bg-selected); color: var(--text-white); }
 .file-tree__item-icon { flex-shrink: 0; font-size: 14px; display: flex; align-items: center; }
 .file-tree__item-name { overflow: hidden; text-overflow: ellipsis; font-size: 13px; margin-left: 1px; }
 
@@ -280,7 +520,7 @@ body {
 .default-file-icon::before {
   font-family: 'FontAwesome', sans-serif;
   content: '\f15b'; /* fa-file */
-  color: #858585;
+  color: var(--text-secondary);
   font-size: 13px;
   margin-right: 4px;
 }
@@ -364,8 +604,8 @@ body {
   max-width: 160px;
 }
 .theia-welcome-dropzone {
-  font-size: 11px;
-  color: var(--text-muted);
+  font-size: 11.5px;
+  color: var(--text-secondary);
   margin-top: 6px;
   padding: 20px 10px;
   border: 1px dashed var(--border-color);
@@ -374,7 +614,7 @@ body {
   text-align: center;
   cursor: pointer;
   transition: all 0.2s ease;
-  background: rgba(0, 0, 0, 0.08);
+  background: var(--bg-tertiary);
 }
 .theia-welcome-dropzone:hover {
   border-color: var(--accent-blue);
@@ -787,14 +1027,15 @@ body {
 .ls-overlay__badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
+  gap: 6px;
+  font-size: 12.5px;
   font-family: var(--font-mono);
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 .ls-overlay__dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -808,27 +1049,54 @@ body {
 .ls-overlay__badge--scanning { color: var(--accent-blue); }
 .ls-overlay__badge--complete { color: var(--text-success); }
 .ls-overlay__badge--error    { color: var(--text-error); }
-.ls-overlay__badge--idle     { color: var(--text-muted); }
+.ls-overlay__badge--idle     { color: var(--text-secondary); }
 .ls-overlay__badge--paused   { color: var(--text-warning); }
+
+/* HITL checkpoint ("Awaiting Review") — deliberately distinct from --paused
+   (amber = "you clicked Pause"). Violet signals "waiting on a decision from
+   you", and the icon pulses rather than sitting static, drawing the eye the
+   same way a real notification badge would. */
+.ls-overlay__badge--review { color: var(--accent-purple); }
+/* Next-step hint shown at a human checkpoint (Stage 1 → Stage 2) */
+.ls-overlay__next-step {
+  margin-top: 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  border-left: 2px solid var(--accent-purple);
+  background: rgba(197,134,192,0.08);
+  padding: 6px 10px;
+  border-radius: 0 4px 4px 0;
+}
+.ls-overlay__review-icon {
+  color: var(--accent-purple);
+  flex-shrink: 0;
+  animation: ls-review-pulse 1.6s ease-in-out infinite;
+}
+@keyframes ls-review-pulse {
+  0%, 100% { opacity: 1;    transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(0.9); }
+}
 .ls-overlay__pct {
-  font-size: 11px;
+  font-size: 12.5px;
   font-family: var(--font-mono);
-  color: var(--text-muted);
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 /* Progress bar */
 .ls-overlay__progress-label {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 11px;
   font-family: var(--font-mono);
-  color: var(--text-muted);
-  margin-bottom: 4px;
+  color: var(--text-secondary);
+  margin-bottom: 5px;
 }
 .ls-overlay__progress-track {
-  height: 3px;
+  height: 5px;
   background: var(--bg-tertiary);
-  border-radius: 2px;
+  border-radius: 3px;
   overflow: hidden;
 }
 .ls-overlay__progress-fill {
@@ -842,6 +1110,139 @@ body {
   background: linear-gradient(90deg, transparent, var(--accent-blue), transparent);
   animation: progress-shimmer 1.6s ease-in-out infinite;
 }
+
+/* ── Pipeline Stepper (vertical timeline of migration phases) ─────────────── */
+.ls-overlay__stepper {
+  display: flex;
+  flex-direction: column;
+}
+.ls-overlay__step {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+/* Rail = the icon + the connector line beneath it, centered in a narrow column */
+.ls-overlay__step-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 16px;
+  flex-shrink: 0;
+}
+.ls-overlay__step-icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  z-index: 1;
+}
+.ls-overlay__step-line {
+  width: 2px;
+  flex: 1;
+  min-height: 10px;
+  background: var(--border-color);
+  margin: 1px 0;
+  border-radius: 1px;
+}
+/* A completed step's connector is green — draws the "path travelled" */
+.ls-overlay__step--done .ls-overlay__step-line {
+  background: var(--text-success);
+}
+/* The line leading out of the active step gets a subtle animated pulse */
+.ls-overlay__step--active .ls-overlay__step-line {
+  background: linear-gradient(var(--accent-blue), var(--border-color));
+}
+.ls-overlay__step-label {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  line-height: 18px;
+  padding-bottom: 10px;
+  color: var(--text-secondary);
+}
+/* Pending step: hollow dot */
+.ls-overlay__step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-secondary);
+  box-sizing: border-box;
+}
+.ls-overlay__step--done   .ls-overlay__step-icon { color: var(--text-success); }
+.ls-overlay__step--active .ls-overlay__step-icon { color: var(--accent-blue); }
+.ls-overlay__step--error  .ls-overlay__step-icon { color: var(--text-error); }
+.ls-overlay__step--done   .ls-overlay__step-label { color: var(--text-primary); }
+.ls-overlay__step--active .ls-overlay__step-label {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+.ls-overlay__step--error  .ls-overlay__step-label {
+  color: var(--text-error);
+  font-weight: 600;
+}
+/* Pending labels stay readable (secondary, not muted) but lighter weight */
+.ls-overlay__step--pending .ls-overlay__step-label { color: var(--text-secondary); }
+
+/* Stage-honesty warning — a phase that finished but produced something hollow
+   (e.g. empty graphs). Comes AFTER --done above so it wins the color override
+   on the same element (both classes are applied together: "done" + "warning"). */
+.ls-overlay__step--warning .ls-overlay__step-icon  { color: var(--text-warning); }
+.ls-overlay__step--warning .ls-overlay__step-label { color: var(--text-warning); }
+
+/* Per-stage completed duration — trailing, de-emphasized */
+.ls-overlay__step-duration {
+  margin-left: auto;
+  padding-left: 8px;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* Elapsed-run timer */
+.ls-overlay__elapsed {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+/* Connection-lost banner — distinct red accent, not the violet "review" or
+   amber "warning" treatments, since this is a different kind of problem
+   (the app itself may not be receiving updates, not a pipeline state). */
+.ls-overlay__conn-lost {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  font-size: 11.5px;
+  color: var(--text-error);
+  background: var(--bg-tertiary);
+  border-left: 3px solid var(--text-error);
+  border-radius: 0 4px 4px 0;
+}
+.ls-overlay__conn-lost-text { flex: 1; }
+.ls-overlay__reconnect-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-error);
+  background: none;
+  border: 1px solid var(--text-error);
+  border-radius: 3px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.ls-overlay__reconnect-btn:hover { background: rgba(244,135,113,0.12); }
 
 /* Active Tool */
 .ls-overlay__tool {
@@ -863,24 +1264,30 @@ body {
   font-weight: 500;
 }
 .ls-overlay__tool-args {
-  font-size: 10px;
+  font-size: 10.5px;
   font-family: var(--font-mono);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Thinking state — shown when running but no tool executing (LLM generating) */
+/* Thinking state — shown when running but no tool executing (LLM generating).
+   Gently pulses so it's clearly "working", not stalled. */
 .ls-overlay__thinking {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-family: var(--font-mono);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-style: italic;
-  padding: 4px 2px;
+  padding: 5px 2px;
+  animation: ls-thinking-pulse 1.6s ease-in-out infinite;
+}
+@keyframes ls-thinking-pulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
 }
 
 
@@ -888,16 +1295,16 @@ body {
 .ls-overlay__rows { display: flex; flex-direction: column; gap: 4px; }
 .ls-overlay__row  { display: flex; align-items: baseline; gap: 6px; }
 .ls-overlay__key  {
-  font-size: 9.5px;
+  font-size: 10px;
   font-family: var(--font-mono);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   min-width: 44px;
   flex-shrink: 0;
 }
 .ls-overlay__val {
-  font-size: 11px;
+  font-size: 11.5px;
   font-family: var(--font-mono);
   color: var(--text-primary);
   overflow: hidden;
@@ -1067,7 +1474,19 @@ body {
 }
 .bottom-panel__tab.active { color: var(--text-primary); border-bottom-color: var(--accent-blue); }
 .bottom-panel__tab:hover { color: var(--text-primary); }
+/* The terminal is always a dark console, independent of the page theme (VS Code/Theia
+   behave the same way — terminal.background doesn't follow the workbench theme toggle).
+   Re-pin the shared text/border tokens here so nested rows (log-row, tool-call, phase-row,
+   thinking-row, turn-row, todo-row) stay legible instead of turning dark-on-dark in light mode. */
 .terminal {
+  --bg-primary:     #1e1e1e;
+  --text-primary:   #cccccc;
+  --text-secondary: #9d9d9d;
+  --text-muted:     #757575;
+  --text-white:     #ffffff;
+  --border-color:   #3c3c3c;
+  --border-subtle:  #2d2d2d;
+
   flex: 1;
   overflow-y: auto;
   padding: 8px 12px;
@@ -1075,6 +1494,7 @@ body {
   font-size: 12px;
   line-height: 1.6;
   background: #0d0d0d;
+  color: var(--text-primary);
 }
 .terminal__line { display: flex; gap: 8px; }
 .terminal__time { color: var(--text-muted); flex-shrink: 0; }
@@ -1372,6 +1792,14 @@ body {
 
 /* ── Status Bar ────────────────────────────────────────────────────────── */
 .status-bar {
+  /* Always solid blue regardless of theme — re-pin the status/accent tokens
+     used inside it so badges (cost, success/error states) stay legible on
+     blue instead of picking up light-theme colors tuned for a white canvas. */
+  --text-success: #4ec9b0;
+  --text-error:   #f48771;
+  --text-warning: #cca700;
+  --text-info:    #9cdcfe;
+
   height: var(--statusbar-height);
   background: var(--accent-blue);
   display: flex;
@@ -1392,6 +1820,112 @@ body {
 .text-error { color: var(--text-error); }
 .text-warning { color: var(--text-warning); }
 .text-muted { color: var(--text-muted); }
+
+/* ── Stage 1 → Stage 2 checkpoint banner (Operational Panel) ─────────────── */
+.stage1-checkpoint {
+  border: 1px solid rgba(78,201,176,0.3);
+  background: rgba(78,201,176,0.06);
+  border-left: 3px solid var(--text-success);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stage1-checkpoint__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.stage1-checkpoint__body {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.stage1-checkpoint__body code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-info);
+  background: var(--bg-primary);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.stage1-checkpoint__next {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-blue);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* ── Target Configuration lock / edit / cancel ───────────────────────────── */
+.target-config__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.target-config__status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--accent-blue);
+  flex-shrink: 0;
+}
+.target-config__edit-btn,
+.target-config__cancel-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  border-radius: 3px;
+  padding: 3px 8px;
+  cursor: pointer;
+  background: none;
+  transition: background 0.15s;
+}
+.target-config__edit-btn {
+  color: var(--accent-blue);
+  border: 1px solid var(--accent-blue);
+}
+.target-config__edit-btn:hover { background: rgba(0,122,204,0.1); }
+.target-config__cancel-btn {
+  color: var(--text-error);
+  border: 1px solid var(--text-error);
+}
+.target-config__cancel-btn:hover { background: rgba(244,135,113,0.12); }
+
+.target-config__hint {
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 5px 8px;
+  border-radius: 3px;
+  margin-bottom: 10px;
+}
+.target-config__hint--editing {
+  color: var(--text-info);
+  background: rgba(0,122,204,0.08);
+}
+.target-config__summary {
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  padding: 6px 8px;
+  border-radius: 3px;
+}
 
 /* ── Premium AI Panel Styles ────────────────────────────────────────────── */
 .ai-panel__header-icon {
@@ -1423,7 +1957,7 @@ body {
 
 /* Stack Badge Premium */
 .stack-badge-premium {
-  background: linear-gradient(135deg, rgba(37,37,38,0.7) 0%, rgba(45,45,45,0.7) 100%);
+  background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 10px;
@@ -1437,20 +1971,21 @@ body {
 .badge-pill {
   display: flex;
   flex-direction: column;
-  background: rgba(30,30,30,0.6);
+  background: var(--bg-primary);
   padding: 6px 8px;
   border-radius: 4px;
-  border: 1px solid rgba(255,255,255,0.03);
+  border: 1px solid var(--border-subtle);
 }
 .badge-pill__label {
-  font-size: 9px;
-  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  margin-bottom: 2px;
+  letter-spacing: 0.04em;
+  margin-bottom: 3px;
 }
 .badge-pill__value {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   font-family: var(--font-mono);
   overflow: hidden;
@@ -1474,7 +2009,7 @@ body {
   font-size: 11px;
   text-align: center;
   gap: 8px;
-  background: rgba(0,0,0,0.1);
+  background: var(--bg-tertiary);
 }
 
 /* Custom Select & Form controls */
@@ -1633,57 +2168,6 @@ body {
   white-space: nowrap;
   font-family: var(--font-mono);
 }
-
-/* Phase List Premium */
-.phase-list-premium {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 4px;
-}
-.phase-item-premium {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  background: rgba(30,30,30,0.3);
-  border: 1px solid transparent;
-  transition: all 0.2s ease;
-}
-.phase-item-premium.done {
-  border-color: rgba(78,201,176,0.15);
-  background: rgba(78,201,176,0.04);
-}
-.phase-item-premium.active {
-  border-color: rgba(0,122,204,0.3);
-  background: rgba(0,122,204,0.08);
-  box-shadow: inset 0 0 4px rgba(0,122,204,0.05);
-}
-.phase-item-premium.pending {
-  opacity: 0.6;
-}
-.phase-item-icon-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-}
-.phase-item-icon-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--text-muted);
-}
-.phase-item-label-text {
-  font-weight: 500;
-}
-.phase-item-premium.done .phase-item-label-text { color: var(--text-success); }
-.phase-item-premium.active .phase-item-label-text { color: var(--text-white); font-weight: 600; }
-.phase-item-premium.pending .phase-item-label-text { color: var(--text-muted); }
 
 .spin {
   animation: spin 2s linear infinite;
@@ -1971,15 +2455,29 @@ body {
   max-width: 800px;
 }
 .field-block__breadcrumb {
-  font-size: 10px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  font-size: 11.5px;
   font-family: var(--font-mono);
+  margin-bottom: 5px;
+}
+.field-block__crumb {
+  color: var(--text-secondary);
+}
+.field-block__crumb-sep {
+  color: var(--text-muted);
+}
+/* The actual setting name — the thing you scanned for, made prominent */
+.field-block__crumb-current {
   color: var(--text-info);
-  opacity: 0.8;
+  font-weight: 600;
 }
 .field-block__description {
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.5;
+  font-size: 12.5px;
+  color: var(--text-primary);
+  line-height: 1.55;
 }
 .field-block__input-area {
   margin-top: 4px;
@@ -1998,7 +2496,7 @@ body {
 .settings-list-items {
   display: flex;
   flex-direction: column;
-  background: rgba(0,0,0,0.1);
+  background: var(--bg-tertiary);
 }
 .settings-list-item-row {
   display: flex;
@@ -2193,9 +2691,9 @@ body {
   color: var(--text-primary);
 }
 .agent-details-id {
-  font-size: 10px;
+  font-size: 11.5px;
   font-family: var(--font-mono);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   margin-top: 2px;
 }
 .agent-toggles-container {
@@ -2239,7 +2737,7 @@ body {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   overflow: hidden;
-  background: rgba(0,0,0,0.1);
+  background: var(--bg-tertiary);
 }
 .ai-config-table th {
   background: var(--bg-secondary);
@@ -2382,6 +2880,89 @@ body {
   --notificationLink-fg:               var(--accent-blue);
   --notif-bell-dot-color:              var(--accent-blue);
   --widget-shadow:                     rgba(0,0,0,0.36);
+}
+
+/* ── Confirm Dialog (SNS IDE: packages/core/src/browser/style/dialog.css) ── */
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5000;
+}
+.dialog-block {
+  min-width: 400px;
+  max-width: 480px;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  overflow: hidden;
+}
+.dialog-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-color);
+}
+.dialog-title__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+}
+.dialog-title__close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.dialog-content {
+  padding: 16px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  white-space: pre-line;
+}
+.dialog-control {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--border-color);
+}
+.dialog-control .theia-button {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 14px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.dialog-control .theia-button.main {
+  background: var(--accent-blue);
+  border: 1px solid var(--accent-blue);
+  color: #ffffff;
+}
+.dialog-control .theia-button.main:hover {
+  background: var(--accent-blue-hover);
+}
+.dialog-control .theia-button.secondary {
+  background: none;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+.dialog-control .theia-button.secondary:hover {
+  background: var(--bg-hover);
 }
 
 /* ── Overlay container (height:0 — SNS IDE pattern) ─────────────────────── */

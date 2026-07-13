@@ -1,13 +1,4 @@
-// =============================================================================
-//  hooks/useResize.ts
-//  Generic reusable panel resize hook.
-//
-//  Replaces 3 copy-pasted resize handlers in page.tsx with one generic hook.
-//
-//  Usage:
-//    const [sidebarWidth, startResizeSidebar] = usePanelResize(260, 150, 500, 'x');
-//    const [terminalHeight, startResizeTerminal] = usePanelResize(220, 80, 600, 'y', true);
-// =============================================================================
+// Generic reusable panel resize hook — replaces 3 copy-pasted resize handlers in page.tsx.
 
 import { useState, useEffect, useRef } from 'react';
 
