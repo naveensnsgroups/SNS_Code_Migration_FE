@@ -131,6 +131,12 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
+/* Form controls don't inherit font-family from body by default in any
+   browser — without this, every button/input/select that doesn't set its
+   own font-family falls back to the OS's default UI font instead of Inter. */
+button, input, select, textarea {
+  font-family: inherit;
+}
 
 /* ── Scrollbar ─────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -274,7 +280,141 @@ body {
   color: var(--activity-fg);
   border-left: 2px solid var(--accent-blue);
 }
-.activity-bar__bottom { margin-top: auto; }
+.activity-bar__bottom {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.activity-bar__connected-dot {
+  position: absolute;
+  bottom: 6px;
+  right: 9px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-success);
+  border: 1.5px solid var(--bg-activity);
+}
+
+/* ── Account popover (SNS IDE ACCOUNTS_MENU) ─────────────────────────────── */
+.account-menu {
+  position: fixed;
+  left: calc(var(--activity-width) + 4px);
+  bottom: calc(var(--statusbar-height) + 6px);
+  z-index: 5000;
+  min-width: 230px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.account-menu__header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 4px;
+}
+.account-menu__avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.account-menu__avatar--fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-blue);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+.account-menu__id {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.account-menu__name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.account-menu__login {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.account-menu__empty {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 4px 8px 6px;
+}
+.account-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+}
+.account-menu__item:hover { background: var(--bg-hover); }
+.account-menu__item--primary { color: var(--text-info); font-weight: 600; }
+
+/* ── GitHub device-flow code display ─────────────────────────────────────── */
+.github-code-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.github-code {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  text-align: center;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  padding: 10px 12px;
+  user-select: all;
+}
+.github-code__copy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 40px;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.github-code__copy:hover { background: var(--bg-hover); color: var(--text-primary); }
 
 /* ── Sidebar / Explorer ────────────────────────────────────────────────── */
 .sidebar {

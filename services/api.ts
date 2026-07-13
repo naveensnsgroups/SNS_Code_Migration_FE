@@ -83,6 +83,38 @@ export async function scanProject(
   return res.json() as Promise<ScanResponse>;
 }
 
+export interface GithubCloneRequest {
+  repoUrl: string;
+  branch?: string;
+  /** Omit for a public repo — required only for a private one. */
+  accessToken?: string;
+  provider?: string;
+  model?: string;
+  apiKey?: string;
+  apiKeys?: Record<string, string>;
+  agentsConfig?: unknown;
+  aliasesConfig?: Record<string, string>;
+  maxRetries?: number;
+  retryDelayRateLimit?: number;
+  retryDelayOther?: number;
+}
+
+export async function cloneFromGithub(
+  backendUrl: string,
+  payload: GithubCloneRequest
+): Promise<{ sessionId: string }> {
+  const res = await fetch(`${backendUrl}/api/github/clone`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error || 'Failed to clone repository.');
+  }
+  return res.json() as Promise<{ sessionId: string }>;
+}
+
 export async function startMigration(
   backendUrl: string,
   payload: MigrateStartPayload
@@ -349,4 +381,51 @@ export function downloadFile(backendUrl: string, sessionId: string, fileName: st
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+}
+
+// ── GitHub OAuth Device Flow ────────────────────────────────────────────────
+
+export interface GithubDeviceResponse {
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  expiresIn: number;
+  interval: number;
+}
+
+export interface GithubPollResponse {
+  status: 'pending' | 'slow_down' | 'authorized' | 'expired' | 'denied' | 'error';
+  interval?: number;
+  error?: string;
+  accessToken?: string;
+  user?: { login: string; name?: string };
+}
+
+// clientId is an optional override — normally unset, since the backend ships
+// with its own default (GITHUB_OAUTH_CLIENT_ID), the same way VS Code / the
+// gh CLI bake in their own Client ID rather than asking the user for one.
+export async function startGithubDeviceFlow(backendUrl: string, clientId?: string): Promise<GithubDeviceResponse> {
+  const res = await fetch(`${backendUrl}/api/auth/github/device`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(clientId ? { clientId } : {}),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error || 'Failed to start GitHub sign-in.');
+  }
+  return res.json() as Promise<GithubDeviceResponse>;
+}
+
+export async function pollGithubDeviceFlow(backendUrl: string, deviceCode: string, clientId?: string): Promise<GithubPollResponse> {
+  const res = await fetch(`${backendUrl}/api/auth/github/poll`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(clientId ? { clientId, deviceCode } : { deviceCode }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({})) as { error?: string };
+    throw new Error(body.error || 'GitHub sign-in polling failed.');
+  }
+  return res.json() as Promise<GithubPollResponse>;
 }

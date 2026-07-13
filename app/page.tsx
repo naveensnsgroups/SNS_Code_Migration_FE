@@ -2,6 +2,7 @@
 
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { Files, Search, Bot, Settings, Zap, Terminal, Wrench, Database, DollarSign } from 'lucide-react';
+import GithubLogo from '@/components/icons/GithubLogo';
 import ExplorerPanel  from '@/components/ExplorerPanel';
 import CodeViewer     from '@/components/CodeViewer';
 import AIPanel        from '@/components/AIPanel';
@@ -9,6 +10,8 @@ import TerminalPanel  from '@/components/TerminalPanel';
 import SearchPanel    from '@/components/SearchPanel';
 import SettingsTab    from '@/components/SettingsTab';
 import AIConfigTab    from '@/components/AIConfigTab';
+import AccountMenu, { type GithubUser } from '@/components/AccountMenu';
+import GithubSignInDialog from '@/components/GithubSignInDialog';
 import { NotificationBell } from '@/components/notifications/NotificationCenter';
 import { useMigration }  from '@/hooks/useMigration';
 import { usePanelResize } from '@/hooks/useResize';
@@ -46,6 +49,10 @@ export default function HomePage() {
   const [aiPanelOpen, setAiPanelOpen]           = useState(false);
   const [activeEditorTab, setActiveEditorTab]   = useState<'code' | 'settings' | 'aiconfig'>('code');
   const [settingsTrigger, setSettingsTrigger]   = useState(0);
+  const [accountMenuOpen, setAccountMenuOpen]   = useState(false);
+  // GitHub account — null until signed in, restored from localStorage on mount.
+  const [githubUser, setGithubUser]             = useState<GithubUser | null>(null);
+  const [githubSignInOpen, setGithubSignInOpen] = useState(false);
 
   // ── Settings + backend URL ────────────────────────────────────────────────
   const backendUrl = useBackendUrl(settingsTrigger);
@@ -70,7 +77,7 @@ export default function HomePage() {
     migrationTaskList, ruleCoverageReport, isPlanning, isGenerating, isVerifying,
     graphResolutionSummary, isCheckpointBusy,
     lastEventAt, runStartedAt, phaseDurations, reconnect,
-    handleUpload, handleStart, handleContinueAnalysis, handleSkipToStage2,
+    handleUpload, handleCloneFromGithub, handleStart, handleContinueAnalysis, handleSkipToStage2,
     handleStartMigrationPlanning, handleStartCodeGeneration,
     handleStartVerification,
     handleStop, handlePause, handleSelectFile, clearSelectedFile,
@@ -162,13 +169,53 @@ export default function HomePage() {
     handleSelectFile(path, setActiveEditorTab);
   }, [handleSelectFile]);
 
+  // ── GitHub account (device-flow OAuth) ─────────────────────────────────────
+  // Restore a previous sign-in on mount. The token lives in localStorage (same
+  // model the app already uses for provider API keys) so clone/push can reuse it.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('github_user');
+      if (raw) setGithubUser(JSON.parse(raw));
+    } catch { /* ignore malformed */ }
+  }, []);
+
+  // No client-side gate here — the backend ships its own default Client ID
+  // (GITHUB_OAUTH_CLIENT_ID), so sign-in just works, the same as VS Code's
+  // "Sign in with GitHub" needing no setup. If that env var genuinely isn't
+  // set on the server, GithubSignInDialog surfaces that error itself.
+  const handleGithubSignIn = useCallback(() => {
+    setAccountMenuOpen(false);
+    setGithubSignInOpen(true);
+  }, []);
+
+  const handleGithubSignInSuccess = useCallback((token: string, user: GithubUser) => {
+    localStorage.setItem('github_access_token', token);
+    localStorage.setItem('github_user', JSON.stringify(user));
+    setGithubUser(user);
+    setGithubSignInOpen(false);
+    notify({ type: 'success', message: `Connected to GitHub as @${user.login}.` });
+  }, [notify]);
+
+  const handleGithubSignOut = useCallback(() => {
+    setAccountMenuOpen(false);
+    localStorage.removeItem('github_access_token');
+    localStorage.removeItem('github_user');
+    setGithubUser(null);
+    notify({ type: 'info', message: 'Signed out of GitHub.' });
+  }, [notify]);
+
+  const githubClientId = (typeof window !== 'undefined'
+    ? (localStorage.getItem('setting_general_github_client_id') || '')
+    : '').replace(/^"|"$/g, '').trim();
+
   // ── Activity bar items ─────────────────────────────────────────────────────
+  // Top group scrolls with the views; Settings + Account are pinned at the
+  // bottom (SNS IDE / Theia leftPanelHandler.addBottomMenu pattern).
   const activityItems = [
-    { icon: <Files size={18} />,    id: 'explorer', title: 'Explorer',                type: 'sidebar'       as const },
-    { icon: <Search size={18} />,   id: 'search',   title: 'Search',                  type: 'sidebar'       as const },
-    { icon: <Bot size={18} />,      id: 'aiconfig', title: 'AI Configuration',         type: 'tab'           as const, tabId: 'aiconfig' as const },
-    { icon: <Zap size={18} />,      id: 'pipeline', title: 'Operational Panel',        type: 'right-sidebar' as const },
-    { icon: <Settings size={18} />, id: 'settings', title: 'Settings',                 type: 'tab'           as const, tabId: 'settings' as const },
+    { icon: <Files size={21} />,    id: 'explorer', title: 'Explorer',                type: 'sidebar'       as const },
+    { icon: <Search size={21} />,   id: 'search',   title: 'Search',                  type: 'sidebar'       as const },
+    { icon: <Bot size={21} />,      id: 'aiconfig', title: 'AI Configuration',         type: 'tab'           as const, tabId: 'aiconfig' as const },
+    { icon: <Zap size={21} />,      id: 'pipeline', title: 'Operational Panel',        type: 'right-sidebar' as const },
   ];
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -224,7 +271,42 @@ export default function HomePage() {
               </button>
             );
           })}
+
+          {/* Bottom-pinned group: Account + Settings (Theia addBottomMenu pattern) */}
+          <div className="activity-bar__bottom">
+            <button
+              className={`activity-bar__btn ${accountMenuOpen ? 'active' : ''}`}
+              title={githubUser ? `Signed in as @${githubUser.login}` : 'Accounts'}
+              onClick={() => setAccountMenuOpen(o => !o)}
+            >
+              <GithubLogo size={21} />
+              {githubUser && <span className="activity-bar__connected-dot" />}
+            </button>
+            <button
+              className={`activity-bar__btn ${activeEditorTab === 'settings' ? 'active' : ''}`}
+              title="Settings"
+              onClick={() => setActiveEditorTab(activeEditorTab === 'settings' ? 'code' : 'settings')}
+            >
+              <Settings size={21} />
+            </button>
+          </div>
         </nav>
+
+        <AccountMenu
+          open={accountMenuOpen}
+          user={githubUser}
+          onSignIn={handleGithubSignIn}
+          onSignOut={handleGithubSignOut}
+          onClose={() => setAccountMenuOpen(false)}
+        />
+
+        <GithubSignInDialog
+          open={githubSignInOpen}
+          backendUrl={backendUrl}
+          clientId={githubClientId}
+          onSuccess={handleGithubSignInSuccess}
+          onClose={() => setGithubSignInOpen(false)}
+        />
 
         {/* Sidebar */}
         {sidebarOpen && activeTab === 'explorer' && (
@@ -233,6 +315,8 @@ export default function HomePage() {
             selectedFile={selectedFile}
             onSelectFile={onSelectFile}
             onUpload={handleUpload}
+            onCloneFromGithub={handleCloneFromGithub}
+            isGithubSignedIn={!!githubUser}
             hasProject={hasProject}
             width={sidebarWidth}
             modernFileTree={modernFileTree}

@@ -215,6 +215,14 @@ export const SETTING_FIELDS: SettingField[] = [
     defaultValue: false,
   },
   {
+    id: 'general_github_client_id',
+    category: 'General',
+    label: 'GitHub OAuth App Client ID (Override)',
+    description: '"Sign in with GitHub" (bottom-left) already works with no setup, using this platform\'s own default OAuth App. Only set this if you are self-hosting and want GitHub sign-in to use YOUR OWN OAuth App (Device Flow enabled) instead of the platform default. Leave blank otherwise.',
+    type: 'string',
+    defaultValue: '',
+  },
+  {
     id: 'general_theme',
     category: 'General',
     label: 'Color Theme',

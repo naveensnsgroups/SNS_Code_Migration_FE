@@ -19,6 +19,7 @@ import {
 import type { ToolCallHistoryItem } from '@/components/live-status/types';
 import {
   scanProject,
+  cloneFromGithub,
   startMigration,
   stopMigration,
   pauseMigration,
@@ -156,6 +157,7 @@ export interface UseMigrationReturn {
   reconnect: () => void;
   // Handlers
   handleUpload: (files: FileList | File[], explicitPaths?: string[]) => Promise<void>;
+  handleCloneFromGithub: (repoUrl: string, branch?: string) => Promise<void>;
   handleStart: (target: TargetStack) => Promise<void>;
   handleContinueAnalysis: () => Promise<void>;
   handleSkipToStage2: () => Promise<void>;
@@ -607,21 +609,58 @@ export function useMigration(
 
     try {
       const data = await scanProject(backendUrl, formData);
-      const sid = data.sessionId;
-      setSessionId(sid);
-      
-      setLogs([]);
-      setProgress(0);
-      setFileTree([]);
-      setDetectedStack(null);
-      
-      addLog(`Unpacked folder. Connecting stream to session ${sid}...`, 'info');
-      openSSE(`${backendUrl}/api/stream/${sid}`);
+      beginScanSession(data.sessionId, 'Unpacked folder.');
     } catch (err: unknown) {
       addLog(`Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
       setStatus('error');
     }
   }, [addLog, backendUrl, openSSE]);
+
+  // ── Clone from GitHub → Scan ─────────────────────────────────────────────────
+  // Same "new project" entry point as handleUpload, sourced from a GitHub repo
+  // instead of local files — the backend clone+scan is fire-and-forget in the
+  // same shape, so everything past sessionId is identical.
+  const handleCloneFromGithub = useCallback(async (repoUrl: string, branch?: string) => {
+    addLog(`Cloning ${repoUrl}${branch ? ` (${branch})` : ''}...`, 'info');
+    setStatus('scanning');
+    setLastEventAt(Date.now());
+
+    const settings = readSettings();
+    const accessToken = localStorage.getItem('github_access_token') || undefined;
+
+    try {
+      const data = await cloneFromGithub(backendUrl, {
+        repoUrl, branch, accessToken,
+        provider: settings.provider,
+        model:    settings.model,
+        apiKey:   settings.apiKey,
+        apiKeys:  settings.allApiKeys,
+        agentsConfig: (() => {
+          try { return JSON.parse(localStorage.getItem('ai_config_agents') || 'null'); } catch { return null; }
+        })(),
+        aliasesConfig: settings.aliasesConfig,
+        maxRetries:          settings.googleMaxRetries,
+        retryDelayRateLimit: settings.googleRetryDelayRateLimit,
+        retryDelayOther:     settings.googleRetryDelayOther,
+      });
+      beginScanSession(data.sessionId, `Cloned ${repoUrl}.`);
+    } catch (err: unknown) {
+      addLog(`Clone failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      setStatus('error');
+    }
+  }, [addLog, backendUrl, openSSE]);
+
+  // Shared tail for both entry points above: reset session-scoped display
+  // state and open the SSE stream for the newly created session.
+  function beginScanSession(sid: string, sourceLabel: string) {
+    setSessionId(sid);
+    setLogs([]);
+    setProgress(0);
+    setFileTree([]);
+    setDetectedStack(null);
+    addLog(`${sourceLabel} Connecting stream to session ${sid}...`, 'info');
+    openSSE(`${backendUrl}/api/stream/${sid}`);
+  }
 
   // ── Start Migration ─────────────────────────────────────────────────────────
   const handleStart = useCallback(async (target: TargetStack) => {
@@ -846,7 +885,7 @@ export function useMigration(
     isPlanning, isGenerating, isVerifying,
     graphResolutionSummary, isCheckpointBusy,
     lastEventAt, runStartedAt, phaseDurations, reconnect,
-    handleUpload, handleStart,
+    handleUpload, handleCloneFromGithub, handleStart,
     handleContinueAnalysis, handleSkipToStage2,
     handleStartMigrationPlanning: codeMigration.handleStartMigrationPlanning,
     handleStartCodeGeneration: codeMigration.handleStartCodeGeneration,

@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import { ChevronRight, FolderOpen, Check, Loader2 } from 'lucide-react';
 import { getFileIcon, getFolderIcon } from '../utils/labelProvider';
 import ConfirmDialog from './ConfirmDialog';
+import GithubCloneDialog from './GithubCloneDialog';
+import GithubLogo from './icons/GithubLogo';
 import type { FileNode } from '@/types';
 
 interface Props {
@@ -11,6 +13,8 @@ interface Props {
   selectedFile: string | null;
   onSelectFile: (path: string, content?: string) => void;
   onUpload: (files: FileList | File[], paths?: string[]) => void;
+  onCloneFromGithub: (repoUrl: string, branch?: string) => Promise<void>;
+  isGithubSignedIn: boolean;
   hasProject: boolean;
   width?: number;
   modernFileTree?: FileNode[];       // Output directory tree from @parcel/watcher refresh
@@ -81,9 +85,10 @@ function FileItem({
   );
 }
 
-export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, onUpload, hasProject, width, modernFileTree = [], modernFolderBasename, onNewProject }: Props) {
+export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, onUpload, onCloneFromGithub, isGithubSignedIn, hasProject, width, modernFileTree = [], modernFolderBasename, onNewProject }: Props) {
   const [isUploading, setIsUploading] = useState(false);
   const [showNewProjectConfirm, setShowNewProjectConfirm] = useState(false);
+  const [showGithubClone, setShowGithubClone] = useState(false);
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
@@ -175,6 +180,12 @@ export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, on
         onConfirm={() => { setShowNewProjectConfirm(false); onNewProject?.(); }}
         onCancel={() => setShowNewProjectConfirm(false)}
       />
+      <GithubCloneDialog
+        open={showGithubClone}
+        isSignedIn={isGithubSignedIn}
+        onClone={async (repoUrl, branch) => { await onCloneFromGithub(repoUrl, branch); setShowGithubClone(false); }}
+        onClose={() => setShowGithubClone(false)}
+      />
       <div className="sidebar__content">
         {!hasProject ? (
           <div className="theia-welcome-view">
@@ -212,6 +223,13 @@ export default function ExplorerPanel({ fileTree, selectedFile, onSelectFile, on
                 <p style={{ fontSize: '11px', lineHeight: '1.4', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '210px' }}>
                   Your browser will ask you to confirm folder access — click Upload to continue.
                 </p>
+                <button
+                  className="btn-premium btn-premium--secondary theia-welcome-btn"
+                  style={{ marginTop: '10px', maxWidth: '220px', whiteSpace: 'nowrap' }}
+                  onClick={() => setShowGithubClone(true)}
+                >
+                  <GithubLogo size={16} style={{ marginRight: 7, flexShrink: 0 }} /> Clone from GitHub
+                </button>
               </>
             )}
             {!isUploading && (
