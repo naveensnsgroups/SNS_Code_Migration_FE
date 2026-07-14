@@ -112,14 +112,20 @@ export default function TargetConfig({
       </div>
 
       {/* Once locked, the form itself adds nothing over a one-line summary — so
-          it collapses entirely and only re-expands when the user asks to Edit. */}
-      {hasPlan && locked && !isBusy && (
+          it collapses entirely and only re-expands when the user asks to Edit.
+          This must stay collapsed while busy too (Re-plan/Re-generate/Verify
+          running against an existing plan) — busy is itself a form of locked,
+          not a reason to re-expand the full form. The only case that genuinely
+          needs the full form while "busy" is the very first Migration Planning
+          run, before any plan exists yet — hasPlan is false then, so it falls
+          through to the form below regardless of lock state. */}
+      {hasPlan && locked && (
         <div className="target-config__summary">
           {[targetFramework, targetDb, targetLang, testFramework].filter(Boolean).join(' · ') || 'No values set'}
         </div>
       )}
 
-      {(!hasPlan || !locked || isBusy) && (
+      {!(hasPlan && locked) && (
         <>
           {hasPlan && !locked && !isBusy && (
             <div className="target-config__hint target-config__hint--editing">
@@ -132,7 +138,11 @@ export default function TargetConfig({
             label="Target Framework"
             value={targetFramework}
             placeholder="e.g. NestJS, FastAPI, Quarkus…"
-            hint={detectedStack.framework}
+            // Layer Analysis annotates the "API / Bridge Layer" row (detectedStack.apiLayer)
+            // with this same targetFramework value — the hint here must show the SAME
+            // detected field, or the two disagree (e.g. "Detected: None" here next to
+            // "CGI (Common Gateway Interface)" there, for the identical concept).
+            hint={detectedStack.apiLayer}
             disabled={locked}
             onChange={onFrameworkChange}
           />

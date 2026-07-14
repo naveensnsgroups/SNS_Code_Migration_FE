@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Activity, CheckCircle2, ArrowDown } from 'lucide-react';
 import type { DetectedStack, MigrationStatus, MigrationPhase, TargetStack, AIProvider, MigrationTaskEntry, RuleCoverageEntry, GraphResolutionSummary } from '@/types';
 import type { LogEntry } from '@/types';
+import type { ReportedIssue } from '@/services/api';
 
 import { readSettings } from '@/hooks/useSettings';
 import { useLiveStatus } from '@/hooks/useLiveStatus';
@@ -52,6 +53,9 @@ interface Props {
   // Stage 2 — Migration Planning
   migrationTaskList?:  MigrationTaskEntry[] | null;
   ruleCoverageReport?: RuleCoverageEntry[] | null;
+  planSanityWarning?: string | null;
+  reportedIssues?: ReportedIssue[];
+  onReportIssue?: (stage: string, text: string) => Promise<void>;
   isPlanning?:         boolean;
   onStartMigration?:   (target: TargetStack) => void;
   // Stage 2 — Code Generation
@@ -84,7 +88,8 @@ export default function AIPanel({
   graphResolutionSummary, isCheckpointBusy, onContinueAnalysis, onSkipToStage2,
   lastEventAt = null, runStartedAt = null, phaseDurations = {}, onReconnect,
   settingsTrigger = 0, onSettingsSaved, width,
-  migrationTaskList, ruleCoverageReport, isPlanning, onStartMigration,
+  migrationTaskList, ruleCoverageReport, planSanityWarning, reportedIssues, onReportIssue,
+  isPlanning, onStartMigration,
   isGenerating, onStartGeneration,
   isVerifying, onStartVerification,
 }: Props) {
@@ -444,7 +449,14 @@ export default function AIPanel({
 
             {/* Stage 2 — Migration Plan review (the human checkpoint) */}
             {migrationTaskList && migrationTaskList.length > 0 && (
-              <MigrationTaskList tasks={migrationTaskList} ruleCoverage={ruleCoverageReport ?? []} />
+              <MigrationTaskList
+                tasks={migrationTaskList}
+                ruleCoverage={ruleCoverageReport ?? []}
+                sanityWarning={planSanityWarning ?? null}
+                reportedIssues={reportedIssues ?? []}
+                onReportIssue={onReportIssue}
+                stage="migration-planning"
+              />
             )}
           </>
         )}

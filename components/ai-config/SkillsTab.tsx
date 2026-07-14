@@ -1,5 +1,5 @@
-// Fetches real skill files from GET /api/config/skills — backend reads the /skills
-// directory and parses SKILL.md YAML frontmatter. No mock data, no hardcoded IDs.
+// Fetches real skill files from GET /api/config/skills — backend reads
+// src/knowledge/framework-skills/<name>/skill.md. No mock data, no hardcoded IDs.
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -83,10 +83,9 @@ export default function SkillsTab({ backendUrl }: Props) {
             )}
           </div>
           <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '500px' }}>
-            Skills are <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-info)' }}>SKILL.md</code> files in{' '}
-            <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-info)' }}>skills/&lt;name&gt;/</code>.
-            Agents inject them via{' '}
-            <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-info)' }}>getSkillFileContent</code>.
+            Curated, per-target-framework conventions in{' '}
+            <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-info)' }}>framework-skills/&lt;name&gt;/skill.md</code>.
+            Automatically resolved by target framework and injected into the Migration Planner and Code Generator prompts — not agent tool calls.
           </p>
         </div>
         <button
@@ -114,7 +113,7 @@ export default function SkillsTab({ backendUrl }: Props) {
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}><AlertCircle size={13} /> Could not load skills: {error}</span>
           <br />
           <span style={{ color: 'var(--text-secondary)', fontSize: '11px' }}>
-            Ensure the backend is running and <code style={{ fontFamily: 'var(--font-mono)' }}>skills/</code> directory exists.
+            Ensure the backend is running and <code style={{ fontFamily: 'var(--font-mono)' }}>src/knowledge/framework-skills/</code> exists.
           </span>
         </div>
       ) : skills.length === 0 ? (
@@ -124,7 +123,7 @@ export default function SkillsTab({ backendUrl }: Props) {
         }}>
           <Award size={24} style={{ opacity: 0.3, display: 'block', margin: '0 auto 10px' }} />
           <div style={{ fontWeight: 600, marginBottom: '6px' }}>No skills found</div>
-          <div>Create a <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-info)' }}>skills/&lt;name&gt;/SKILL.md</code> file to add a skill.</div>
+          <div>Create a <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-info)' }}>framework-skills/&lt;name&gt;/skill.md</code> file to add a skill.</div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -133,17 +132,17 @@ export default function SkillsTab({ backendUrl }: Props) {
               key={skill.id}
               style={{
                 background: 'var(--bg-tertiary)',
-                border: `1px solid ${previewId === skill.id ? 'rgba(0,122,204,0.4)' : 'var(--border-color)'}`,
+                border: `1px solid ${previewId === skill.id ? 'rgba(0,122,204,0.4)' : 'rgba(229,192,123,0.2)'}`,
                 borderRadius: '6px', overflow: 'hidden',
                 transition: 'border-color 0.2s',
               }}
             >
               {/* Skill header row */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px' }}>
-                <FileText size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                <FileText size={14} style={{ color: 'var(--accent-yellow)', flexShrink: 0 }} />
 
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, fontFamily: 'var(--font-mono)', color: 'var(--text-info)' }}>
                     {skill.name}
                   </div>
                   {skill.description && (

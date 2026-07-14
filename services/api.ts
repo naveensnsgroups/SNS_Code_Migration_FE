@@ -235,6 +235,27 @@ export interface SessionStateResponse {
   migrationTaskList: MigrationTaskEntry[] | null;
   ruleCoverageReport: RuleCoverageEntry[] | null;
   graphResolutionSummary: GraphResolutionSummary | null;
+  fullProjectCheckResult: FullProjectCheckResult | null;
+  planSanityWarning: string | null;
+  reportedIssues: ReportedIssue[];
+}
+
+// A human-reported issue against the current session, diagnosed (read-only —
+// never auto-fixed) by DIAGNOSTIC_AGENT once submitted via reportIssue().
+export interface ReportedIssue {
+  text: string;
+  stage: string;
+  reportedAt: string;
+  diagnosis?: { rootCause: string; evidence: string; suggestedAction: string };
+}
+
+// The one real, whole-project check — see FullProjectCheckResult on the backend
+// session type for why "ran"/"sandboxAvailable" are kept separate from "errors".
+export interface FullProjectCheckResult {
+  ran:              boolean;
+  sandboxAvailable: boolean;
+  errors:           { file: string; message: string }[];
+  checkedAt:        string;
 }
 
 // Used on page load to recover an in-progress or completed session after a refresh.
@@ -258,6 +279,23 @@ export async function fetchGraphSummary(
   if (!res.ok) throw new Error('Failed to load graph summary');
   const data = await res.json() as { graphResolutionSummary: GraphResolutionSummary | null };
   return data.graphResolutionSummary;
+}
+
+// Human "report an issue" channel — a real DIAGNOSTIC_AGENT investigation
+// (read-only, never auto-fixed) runs after this, not a passive log. See
+// diagnostic-routes.ts / diagnostic-prompt.ts on the backend.
+export async function reportIssue(
+  backendUrl: string,
+  sessionId: string,
+  stage: string,
+  text: string
+): Promise<void> {
+  const res = await fetch(`${backendUrl}/api/migrate/report-issue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, stage, text }),
+  });
+  if (!res.ok) throw new Error(await res.text());
 }
 
 // HITL — Continue: resume Stage 1 into report writing from the checkpoint.

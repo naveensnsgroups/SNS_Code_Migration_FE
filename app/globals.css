@@ -617,8 +617,8 @@ button, input, select, textarea {
   background: var(--bg-tertiary);
 }
 .theia-welcome-dropzone:hover {
-  border-color: var(--accent-blue);
-  color: var(--accent-blue);
+  border-color: var(--text-info);
+  color: var(--text-info);
   background: rgba(0, 122, 204, 0.04);
 }
 
@@ -885,7 +885,7 @@ button, input, select, textarea {
   flex-shrink: 0;
 }
 .live-status-toggle:hover { background: var(--bg-hover); color: var(--text-primary); }
-.live-status-toggle--active { background: rgba(86,156,214,0.15); color: var(--accent-blue); }
+.live-status-toggle--active { background: rgba(86,156,214,0.15); color: var(--text-info); }
 
 /* Pulsing dot on toggle when running */
 .live-status-toggle__dot {
@@ -1046,7 +1046,7 @@ button, input, select, textarea {
 .ls-overlay__dot--idle     { background: var(--text-muted); }
 .ls-overlay__dot--paused   { background: var(--text-warning); }
 .ls-overlay__badge--running  { color: var(--text-success); }
-.ls-overlay__badge--scanning { color: var(--accent-blue); }
+.ls-overlay__badge--scanning { color: var(--text-info); }
 .ls-overlay__badge--complete { color: var(--text-success); }
 .ls-overlay__badge--error    { color: var(--text-error); }
 .ls-overlay__badge--idle     { color: var(--text-secondary); }
@@ -1170,7 +1170,7 @@ button, input, select, textarea {
   box-sizing: border-box;
 }
 .ls-overlay__step--done   .ls-overlay__step-icon { color: var(--text-success); }
-.ls-overlay__step--active .ls-overlay__step-icon { color: var(--accent-blue); }
+.ls-overlay__step--active .ls-overlay__step-icon { color: var(--text-info); }
 .ls-overlay__step--error  .ls-overlay__step-icon { color: var(--text-error); }
 .ls-overlay__step--done   .ls-overlay__step-label { color: var(--text-primary); }
 .ls-overlay__step--active .ls-overlay__step-label {
@@ -1623,7 +1623,7 @@ button, input, select, textarea {
 /* Native <details> triangle marker — SNS IDE L1105-1108 */
 .thinking-row details summary::marker,
 .thinking-row details summary::-webkit-details-marker {
-  color: var(--accent-blue);               /* theia-button-background */
+  color: var(--text-info);               /* theia-button-background */
 }
 
 .thinking-row details summary {
@@ -1860,7 +1860,7 @@ button, input, select, textarea {
   gap: 5px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--accent-blue);
+  color: var(--text-info);
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
@@ -1879,7 +1879,7 @@ button, input, select, textarea {
   gap: 5px;
   font-size: 10.5px;
   font-weight: 600;
-  color: var(--accent-blue);
+  color: var(--text-info);
   flex-shrink: 0;
 }
 .target-config__edit-btn,
@@ -1897,8 +1897,8 @@ button, input, select, textarea {
   transition: background 0.15s;
 }
 .target-config__edit-btn {
-  color: var(--accent-blue);
-  border: 1px solid var(--accent-blue);
+  color: var(--text-info);
+  border: 1px solid var(--text-info);
 }
 .target-config__edit-btn:hover { background: rgba(0,122,204,0.1); }
 .target-config__cancel-btn {
@@ -1925,6 +1925,28 @@ button, input, select, textarea {
   background: var(--bg-tertiary);
   padding: 6px 8px;
   border-radius: 3px;
+}
+
+/* ── Report an Issue card (MigrationTaskList) ────────────────────────────── */
+/* A bordered, left-accented card — not a plain top-border separator — so this
+   reads as its own discoverable feature instead of blending into the plan
+   list above it. */
+.report-issue-card {
+  margin-top: 12px;
+  padding: 10px 10px 10px 12px;
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--text-info);
+  border-radius: 0 4px 4px 0;
+  background: var(--bg-tertiary);
+}
+.report-issue-card__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 7px;
 }
 
 /* ── Premium AI Panel Styles ────────────────────────────────────────────── */
@@ -2175,7 +2197,7 @@ button, input, select, textarea {
 @keyframes spin {
   100% { transform: rotate(360deg); }
 }
-.text-blue { color: var(--accent-blue); }
+.text-blue { color: var(--text-info); }
 
 /* Buttons Premium */
 .btn-premium {
