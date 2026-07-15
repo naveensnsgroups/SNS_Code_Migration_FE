@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ComponentType } from 'react';
 import { Search, Sliders, Check, Settings, X } from 'lucide-react';
 import { ALL_PROVIDERS } from '@/constants/models';
 import { SETTING_FIELDS, type SettingField } from '@/constants/settingFields';
@@ -11,6 +11,22 @@ import StringField     from '@/components/settings/StringField';
 import BooleanToggle   from '@/components/settings/BooleanToggle';
 import SelectField     from '@/components/settings/SelectField';
 import ModelListEditor from '@/components/settings/ModelListEditor';
+import {
+  AnthropicLogo, OpenAILogo, GoogleGeminiLogo, GrokLogo, GroqLogo,
+  OpenRouterLogo, MistralLogo, HuggingFaceLogo,
+} from '@/components/icons/ProviderLogos';
+
+// Provider category name -> its logo component. "General" has no provider logo.
+const CATEGORY_LOGO: Record<string, ComponentType<{ size?: number }>> = {
+  'Anthropic':    AnthropicLogo,
+  'OpenAI':       OpenAILogo,
+  'Google':       GoogleGeminiLogo,
+  'Grok':         GrokLogo,
+  'Groq':         GroqLogo,
+  'OpenRouter':   OpenRouterLogo,
+  'Mistral':      MistralLogo,
+  'Hugging Face': HuggingFaceLogo,
+};
 
 interface Props {
   onSettingsSaved?: () => void;
@@ -325,7 +341,10 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
                   className={`settings-category-item ${activeCategory === cat ? 'active' : ''}`}
                   onClick={() => setActiveCategory(cat)}
                 >
-                  <span className="category-item-text">{cat}</span>
+                  <span className="category-item-text" style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                    {CATEGORY_LOGO[cat] && (() => { const Logo = CATEGORY_LOGO[cat]; return <Logo size={16} />; })()}
+                    {cat}
+                  </span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     {isDefaultProvider && (
                       // Solid green chip with white text — a fixed status color so it
@@ -362,7 +381,10 @@ export default function SettingsTab({ onSettingsSaved, onClose, settingsTrigger 
               <div className="field-block__breadcrumb">
                 <span className="field-block__crumb">Ai-features</span>
                 <span className="field-block__crumb-sep">›</span>
-                <span className="field-block__crumb">{field.category}</span>
+                <span className="field-block__crumb" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                  {CATEGORY_LOGO[field.category] && (() => { const Logo = CATEGORY_LOGO[field.category]; return <Logo size={13} />; })()}
+                  {field.category}
+                </span>
                 <span className="field-block__crumb-sep">›</span>
                 <span className="field-block__crumb-current">{field.label}</span>
               </div>

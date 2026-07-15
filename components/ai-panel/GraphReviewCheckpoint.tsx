@@ -38,11 +38,13 @@ export default function GraphReviewCheckpoint({ summary, isBusy, onContinue, onS
       <div className="ai-section__title">
         <GitBranch size={12} />
         <span>Graph Review</span>
-        {/* Distinct violet pill — matches the Live panel's "Awaiting Review" treatment,
-            signaling this needs a decision from you rather than being another status line. */}
+        {/* Fixed violet + white, not theme variables — same reasoning as the
+            DEFAULT/AGENT chips in SettingsTab.tsx: a status pill needs to read
+            correctly in every theme, and --accent-purple's dark/light values
+            weren't tuned as a pair for white text (fine in dark, weak in light). */}
         <span style={{
           fontSize: '9px', fontWeight: 700, color: '#ffffff',
-          background: 'var(--accent-purple)', border: '1px solid var(--accent-purple)',
+          background: '#8250df', border: '1px solid #8250df',
           borderRadius: '3px', padding: '1px 6px', letterSpacing: '0.4px',
           textTransform: 'uppercase', marginLeft: '2px',
         }}>

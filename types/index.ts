@@ -120,6 +120,11 @@ export interface MigrationTaskEntry {
   dependsOn:     string[];
   status:        'pending' | 'generated' | 'verified' | 'failed';
   lastError?:    string;
+  // Other legacyFile paths merged into this same task because the Planner
+  // assigned them the same targetFile.
+  mergedLegacyFiles?: string[];
+  // Real exported symbols (name + async-ness), extracted from the generated content.
+  exportedSymbols?: { name: string; isAsync: boolean }[];
 }
 
 export interface RuleCoverageEntry {

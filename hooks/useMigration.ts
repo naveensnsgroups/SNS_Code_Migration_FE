@@ -17,6 +17,7 @@ import {
   GraphResolutionSummary,
 } from '@/types';
 import type { ToolCallHistoryItem } from '@/components/live-status/types';
+import type { ReportedIssue } from '@/services/api';
 import {
   scanProject,
   cloneFromGithub,
@@ -144,6 +145,9 @@ export interface UseMigrationReturn {
   // once the 'migration-planning' phase reports 'done'. Null until then.
   migrationTaskList: MigrationTaskEntry[] | null;
   ruleCoverageReport: RuleCoverageEntry[] | null;
+  planSanityWarning: string | null;
+  reportedIssues: ReportedIssue[];
+  handleReportIssue: (stage: string, text: string) => Promise<void>;
   isPlanning: boolean;
   isGenerating: boolean;
   isVerifying: boolean;
@@ -882,6 +886,9 @@ export function useMigration(
     toolCallHistory,
     migrationTaskList: codeMigration.migrationTaskList,
     ruleCoverageReport: codeMigration.ruleCoverageReport,
+    planSanityWarning: codeMigration.planSanityWarning,
+    reportedIssues: codeMigration.reportedIssues,
+    handleReportIssue: codeMigration.handleReportIssue,
     isPlanning, isGenerating, isVerifying,
     graphResolutionSummary, isCheckpointBusy,
     lastEventAt, runStartedAt, phaseDurations, reconnect,

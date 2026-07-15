@@ -74,7 +74,8 @@ export default function HomePage() {
     modernFileTree, modernFolderBasename,
     tokenUsage, isRunning, hasProject,
     activeTool, toolCallHistory,
-    migrationTaskList, ruleCoverageReport, isPlanning, isGenerating, isVerifying,
+    migrationTaskList, ruleCoverageReport, planSanityWarning, reportedIssues, handleReportIssue,
+    isPlanning, isGenerating, isVerifying,
     graphResolutionSummary, isCheckpointBusy,
     lastEventAt, runStartedAt, phaseDurations, reconnect,
     handleUpload, handleCloneFromGithub, handleStart, handleContinueAnalysis, handleSkipToStage2,
@@ -148,21 +149,43 @@ export default function HomePage() {
     setSettingsTrigger(prev => prev + 1);
   }, []);
 
-  // ── New Project ────────────────────────────────────────────────────────────
-  // Blocked while a Stage-2 sub-stage is actively running — abandoning one
-  // mid-flight would leave the backend session in a half-finished state with
-  // no way back to it from this tab. Target Configuration is reset to blank
-  // (a new project likely targets a different stack) by clearing its
-  // localStorage keys and re-triggering AIPanel's existing settings-resync effect.
-  const newProjectBlocked = isRunning || isPlanning || isGenerating || isVerifying;
-  const handleStartNewProject = useCallback(() => {
-    handleNewProject();
+  // ── Target Configuration reset ─────────────────────────────────────────────
+  // Target Framework/Database/Language/Testing values persist in localStorage
+  // globally, not per-project — so every entry point that starts a genuinely
+  // NEW project (not just the explicit "New Project" button) must clear them,
+  // or Layer Analysis silently shows a previous, unrelated project's target
+  // values as if they'd already been confirmed for the one just opened.
+  const resetTargetConfig = useCallback(() => {
     localStorage.removeItem('setting_target_framework');
     localStorage.removeItem('setting_target_database');
     localStorage.removeItem('setting_target_lang');
     localStorage.removeItem('setting_testing_framework');
     setSettingsTrigger(prev => prev + 1);
-  }, [handleNewProject]);
+  }, []);
+
+  // ── New Project ────────────────────────────────────────────────────────────
+  // Blocked while a Stage-2 sub-stage is actively running — abandoning one
+  // mid-flight would leave the backend session in a half-finished state with
+  // no way back to it from this tab.
+  const newProjectBlocked = isRunning || isPlanning || isGenerating || isVerifying;
+  const handleStartNewProject = useCallback(() => {
+    handleNewProject();
+    resetTargetConfig();
+  }, [handleNewProject, resetTargetConfig]);
+
+  // ── Open Folder / Clone from GitHub ────────────────────────────────────────
+  // Same target-config reset as New Project — these are the two OTHER entry
+  // points for starting a new project (the first-ever project in a tab never
+  // goes through "New Project" at all).
+  const handleUploadNewProject = useCallback((files: FileList | File[], explicitPaths?: string[]) => {
+    resetTargetConfig();
+    return handleUpload(files, explicitPaths);
+  }, [handleUpload, resetTargetConfig]);
+
+  const handleCloneNewProject = useCallback((repoUrl: string, branch?: string) => {
+    resetTargetConfig();
+    return handleCloneFromGithub(repoUrl, branch);
+  }, [handleCloneFromGithub, resetTargetConfig]);
 
   // ── File select wrapper ───────────────────────────────────────────────────
   const onSelectFile = useCallback((path: string) => {
@@ -314,8 +337,8 @@ export default function HomePage() {
             fileTree={fileTree}
             selectedFile={selectedFile}
             onSelectFile={onSelectFile}
-            onUpload={handleUpload}
-            onCloneFromGithub={handleCloneFromGithub}
+            onUpload={handleUploadNewProject}
+            onCloneFromGithub={handleCloneNewProject}
             isGithubSignedIn={!!githubUser}
             hasProject={hasProject}
             width={sidebarWidth}
@@ -400,6 +423,9 @@ export default function HomePage() {
               width={aiPanelWidth}
               migrationTaskList={migrationTaskList}
               ruleCoverageReport={ruleCoverageReport}
+              planSanityWarning={planSanityWarning}
+              reportedIssues={reportedIssues}
+              onReportIssue={handleReportIssue}
               isPlanning={isPlanning}
               onStartMigration={handleStartMigrationPlanning}
               isGenerating={isGenerating}
