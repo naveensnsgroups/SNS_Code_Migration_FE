@@ -23,6 +23,8 @@ function readStoredString(key: string, fallback = ''): string {
 
 export interface AppSettings {
   backendUrl: string;
+  /** External AgentBuilder webhook that the "Scanner Agent" button posts uploaded files to. */
+  agentBuilderWebhookUrl: string;
   provider: AIProvider;
   model: string;
   apiKey: string;
@@ -72,6 +74,7 @@ export function readSettings(): AppSettings {
 
   return {
     backendUrl:      readStoredString('setting_general_backend_url', DEFAULT_BACKEND_URL),
+    agentBuilderWebhookUrl: readStoredString('setting_general_agentbuilder_webhook_url', ''),
     provider,
     model,
     apiKey,

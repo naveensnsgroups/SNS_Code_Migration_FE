@@ -1,5 +1,10 @@
-// Migration state, SSE dispatch, and handlers. Migration Planning / Code
-// Generation / Verification live in useCodeMigration.ts (reuses this hook's SSE connection).
+// Migration state, poll dispatch, and handlers. Migration Planning / Code
+// Generation / Verification live in useCodeMigration.ts (reuses this hook's polling).
+//
+// Transport note: this used to be Server-Sent Events (a push connection). It's
+// now polling — the backend can't hold a stream open (see usePolling.ts) — so
+// every tick re-fetches the full session state and this file reduces that into
+// UI state, instead of reducing individual pushed event frames.
 
 'use client';
 
@@ -15,13 +20,19 @@ import {
   MigrationTaskEntry,
   RuleCoverageEntry,
   GraphResolutionSummary,
+  STAGE1_ANALYSIS_VIRTUAL_PATH,
+  KNOWLEDGE_GRAPH_FOLDER,
+  KNOWLEDGE_GRAPH_CATEGORIES,
+  knowledgeGraphVirtualPath,
 } from '@/types';
 import type { ToolCallHistoryItem } from '@/components/live-status/types';
-import type { ReportedIssue } from '@/services/api';
+import type { ReportedIssue, SessionStateResponse } from '@/services/api';
 import {
   scanProject,
+  triggerScannerAgent,
+  triggerStage1Analysis,
+  writeLocalOutput,
   cloneFromGithub,
-  startMigration,
   stopMigration,
   pauseMigration,
   fetchFileContent,
@@ -35,7 +46,7 @@ import {
 } from '@/services/api';
 
 import { readSettings } from '@/hooks/useSettings';
-import { useSSE, SSEEventPayload } from '@/hooks/useSSE';
+import { usePolling } from '@/hooks/usePolling';
 import { useCodeMigration, UseCodeMigrationReturn } from '@/hooks/useCodeMigration';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -48,8 +59,9 @@ function timestamp(): string {
   return new Date().toLocaleTimeString('en-US', { hour12: false });
 }
 
-// Runtime guards for SSE payload fields — the backend's event shape can drift, so
-// an unrecognized value falls back to a known-good default instead of an unchecked cast.
+// Runtime guards for poll payload fields — the backend's response shape can drift,
+// so an unrecognized value falls back to a known-good default instead of an
+// unchecked cast.
 const VALID_LOG_LEVELS = new Set<LogEntry['level']>(['info', 'success', 'error', 'warning', 'command', 'stream']);
 const VALID_MIGRATION_STATUSES = new Set<MigrationStatus>([
   'idle', 'scanning', 'planning', 'discovery', 'file-analysis',
@@ -63,13 +75,19 @@ function safeLogLevel(value: unknown): LogEntry['level'] {
   return VALID_LOG_LEVELS.has(value as LogEntry['level']) ? (value as LogEntry['level']) : 'info';
 }
 
-function markMigrated(tree: FileNode[], path: string): FileNode[] {
-  return tree.map(node => {
-    if (node.path === path) return { ...node, migrated: true };
-    if (node.children) return { ...node, children: markMigrated(node.children, path) };
-    return node;
-  });
-}
+// Statuses that mean "nothing will change server-side until the user (or a new
+// handler call) does something" — polling stops here instead of re-fetching an
+// unchanged response every tick. Mirrors what used to close the SSE connection.
+const TERMINAL_STATUSES = new Set<MigrationStatus>(['idle', 'complete', 'error', 'paused', 'awaiting-graph-review']);
+
+// Statuses the mount-restore effect will resume polling for — a session reloaded
+// mid-run needs its poll loop restarted. code-generation/verification are
+// deliberately excluded here, matching the same gap the old SSE reconnect had:
+// neither sub-stage resumes live polling after a hard reload.
+const RESUMABLE_STATUSES: MigrationStatus[] = [
+  'scanning', 'planning', 'discovery', 'file-analysis',
+  'graph-resolution', 'section-writing', 'assembly', 'migration-planning',
+];
 
 // Reconciles a phases array into a self-consistent state. The backend's persisted
 // session phases can be internally inconsistent (e.g. 'discovery' left 'active'
@@ -105,19 +123,6 @@ export interface TokenUsage {
   model?: string;
 }
 
-// ── Active Tool condensation helper ─────────────────────────────────────────
-function condenseSseArgs(args: Record<string, unknown>): string {
-  const entries = Object.entries(args);
-  if (entries.length === 0) return '';
-  return entries
-    .map(([k, v]) => {
-      const vs = typeof v === 'string' ? v : JSON.stringify(v);
-      return `${k}: ${vs.length > 36 ? vs.slice(0, 36) + '\u2026' : vs}`;
-    })
-    .join('  \u00b7  ')
-    .slice(0, 90);
-}
-
 // ── Hook Return Type ──────────────────────────────────────────────────────────
 
 export interface UseMigrationReturn {
@@ -136,10 +141,16 @@ export interface UseMigrationReturn {
   modernFileTree: FileNode[];
   modernFolderBasename: string;
   tokenUsage: TokenUsage | null;
+  /** Stage-1 Analysis report (markdown) — null until the agent completes. Also
+   * readable as a virtual Stage1_Analysis.md file via handleSelectFile. */
+  analysisReport: string | null;
+  /** Structured entities/relationships from Stage-1 Analysis — null until the
+   * agent completes. Also readable as a virtual Stage1_KnowledgeGraph.json file. */
+  knowledgeGraph: unknown;
   isRunning: boolean;
   hasProject: boolean;
-  activeTool: { name: string; args: string } | null;  // ← SSE-driven, no log parsing
-  /** SSE-driven completed tool call history — newest first, max 20 entries */
+  activeTool: { name: string; args: string } | null;  // ← poll-driven, no log parsing
+  /** Poll-driven completed tool call history — newest first, max 20 entries */
   toolCallHistory: ToolCallHistoryItem[];
   // Stage 2 — Migration Planning task list + rule coverage manifest, populated
   // once the 'migration-planning' phase reports 'done'. Null until then.
@@ -161,6 +172,11 @@ export interface UseMigrationReturn {
   reconnect: () => void;
   // Handlers
   handleUpload: (files: FileList | File[], explicitPaths?: string[]) => Promise<void>;
+  // Scanner Agent — separate external webhook, fired after the project is
+  // already uploaded/saved. isTriggeringScannerAgent is its own in-flight
+  // flag, distinct from isRunning (no phase/status changes while it runs).
+  isTriggeringScannerAgent: boolean;
+  handleTriggerScannerAgent: () => Promise<void>;
   handleCloneFromGithub: (repoUrl: string, branch?: string) => Promise<void>;
   handleStart: (target: TargetStack) => Promise<void>;
   handleContinueAnalysis: () => Promise<void>;
@@ -170,7 +186,7 @@ export interface UseMigrationReturn {
   handleStartVerification: (target: TargetStack) => Promise<void>;
   handleStop: () => Promise<void>;
   handlePause: () => Promise<void>;
-  handleSelectFile: (path: string, setActiveEditorTab: (t: 'code' | 'settings' | 'aiconfig') => void) => Promise<void>;
+  handleSelectFile: (path: string, setActiveEditorTab: (t: 'code') => void) => Promise<void>;
   clearSelectedFile: () => void;
   handleDownload: (fileName: string) => void;
   handleNewProject: () => void;
@@ -196,20 +212,39 @@ export function useMigration(
   const [modernFileTree, setModernFileTree]           = useState<FileNode[]>([]);
   const [modernFolderBasename, setModernFolderBasename] = useState<string>('');
   const [tokenUsage, setTokenUsage]       = useState<TokenUsage | null>(null);
+  const [analysisReport, setAnalysisReport] = useState<string | null>(null);
+  const [knowledgeGraph, setKnowledgeGraph] = useState<unknown>(null);
   const [activeTool, setActiveTool]       = useState<{ name: string; args: string } | null>(null);
   // HITL graph-review checkpoint — the resolved-graph summary + an in-flight flag
   // for the continue/skip actions.
   const [graphResolutionSummary, setGraphResolutionSummary] = useState<GraphResolutionSummary | null>(null);
   const [isCheckpointBusy, setIsCheckpointBusy] = useState(false);
-  // Tool call history — SSE-driven, newest first, capped at 20
+  // Tool call history — poll-driven, newest first, capped at 20
   const [toolCallHistory, setToolCallHistory] = useState<ToolCallHistoryItem[]>([]);
-  // Pending tool call staging, keyed by call id so overlapping calls don't overwrite each other.
-  const pendingToolsRef = React.useRef<Map<string, { name: string; args: string }>>(new Map());
+  // Ids of log entries already appended, so re-fetched backlogs from the backend
+  // (see SessionStateResponse.logs) don't get duplicated into the client list.
+  const seenLogIdsRef = React.useRef<Set<string>>(new Set());
+  // Previous status, to detect transitions (poll ticks re-deliver the same
+  // status repeatedly while nothing changes — only act once, on the edge).
+  const prevStatusRef = React.useRef<MigrationStatus>('idle');
+  // Previous phases snapshot for per-stage timing edges. A ref, not the `phases`
+  // state itself — applyPollResult is handed to setInterval once per startPolling()
+  // call, so if it read `phases` via closure it would see whatever value was
+  // current AT THAT MOMENT forever, not the latest, on every later tick.
+  const phasesRef = React.useRef<MigrationPhase[]>(MIGRATION_PHASES);
+  // Last analysisReport text actually shown in the Terminal — content-keyed,
+  // not transition-keyed. A transition-only check misses a report that lands
+  // in MongoDB *after* status had already reached 'complete' once before
+  // (e.g. re-running the agent after fixing a workflow bug) — status never
+  // transitions again, so a transition-gated log would never fire for it.
+  const lastLoggedAnalysisReportRef = React.useRef<string | null>(null);
+  // Same content-keyed dedupe, for the knowledge graph's local-output write.
+  const lastWrittenKnowledgeGraphRef = React.useRef<string | null>(null);
 
   // ── Live-panel time awareness ────────────────────────────────────────────
-  // lastEventAt: timestamp of the most recent SSE event of ANY type (including
-  // heartbeats) — lets the UI tell "a stage is just slow" apart from "the SSE
-  // connection silently died", which previously looked identical.
+  // lastEventAt: timestamp of the most recent successful poll — lets the UI tell
+  // "a stage is just slow" apart from "polling silently died", which previously
+  // looked identical.
   const [lastEventAt, setLastEventAt] = useState<number | null>(null);
   // runStartedAt: when the current run began — powers the elapsed-time display.
   const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
@@ -222,8 +257,9 @@ export function useMigration(
   // rendered directly, so it doesn't need to trigger re-renders on its own.
   const phaseStartedAtRef = React.useRef<Record<string, number>>({});
 
-  // Ref bridge: handleSSEEvent must exist before useCodeMigration can be called (it needs
-  // openSSE), so it can't reference useCodeMigration's return value directly. Populated below.
+  // Ref bridge: applyPollResult must exist before useCodeMigration can be called (it
+  // needs startPolling), so it can't reference useCodeMigration's return value
+  // directly. Populated below.
   const codeMigrationRef = useRef<UseCodeMigrationReturn | null>(null);
 
   const isRunning     = ['scanning', 'planning', 'discovery', 'file-analysis', 'graph-resolution', 'section-writing', 'assembly'].includes(status);
@@ -239,6 +275,19 @@ export function useMigration(
   const addLog = useCallback((message: string, level: LogEntry['level'] = 'info', phase?: string) => {
     setLogs(prev => {
       const next = [...prev, { id: generateId(), timestamp: timestamp(), level, message, phase }];
+      return next.length > MAX_CLIENT_LOGS ? next.slice(next.length - MAX_CLIENT_LOGS) : next;
+    });
+  }, []);
+
+  // Merge backend-reported log lines in without duplicating ones already shown —
+  // the backend is free to return its whole backlog every tick, or just new lines.
+  const mergeBackendLogs = useCallback((incoming: LogEntry[] | undefined) => {
+    if (!incoming || incoming.length === 0) return;
+    const fresh = incoming.filter(l => !seenLogIdsRef.current.has(l.id));
+    if (fresh.length === 0) return;
+    fresh.forEach(l => seenLogIdsRef.current.add(l.id));
+    setLogs(prev => {
+      const next = [...prev, ...fresh.map(l => ({ ...l, level: safeLogLevel(l.level) }))];
       return next.length > MAX_CLIENT_LOGS ? next.slice(next.length - MAX_CLIENT_LOGS) : next;
     });
   }, []);
@@ -288,234 +337,229 @@ export function useMigration(
           setTokenUsage(data.tokenUsage);
         }
       })
-      .catch(() => { /* non-critical — live SSE will populate */ });
+      .catch(() => { /* non-critical — next poll tick will populate */ });
   }, [sessionId, backendUrl]);
 
-  // ── SSE event handler ───────────────────────────────────────────────────────
-  const handleSSEEvent = useCallback((event: SSEEventPayload) => {
-    // Any event — including 'heartbeat' — proves the connection is alive.
-    setLastEventAt(Date.now());
-    switch (event.type) {
-      case 'tool_call': {
-        // Direct SSE event from AgentExecutor — no log parsing needed
-        const id   = event.data.id as string ?? '';
-        const name = event.data.name as string ?? '';
-        const args = event.data.args as Record<string, unknown> ?? {};
-        const condensed = condenseSseArgs(args);
-        setActiveTool({ name, args: condensed });
-        // Staged until tool_response arrives, keyed by call id.
-        if (id) pendingToolsRef.current.set(id, { name, args: condensed });
-        break;
-      }
-
-      case 'tool_response': {
-        // Tool finished — record in history, clear active tool
-        const id      = event.data.id as string ?? '';
-        const success = event.data.success !== false;  // defaults true if absent
-        const pending = id ? pendingToolsRef.current.get(id) : undefined;
-        if (pending) {
-          const entry: ToolCallHistoryItem = {
-            id:        `tc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-            name:      pending.name,
-            args:      pending.args,
-            success,
-            timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
-          };
-          setToolCallHistory(prev => [entry, ...prev].slice(0, 20)); // newest first, max 20
-          pendingToolsRef.current.delete(id);
-        }
-        // Only clear activeTool if no other overlapping call is still pending.
-        if (pendingToolsRef.current.size === 0) setActiveTool(null);
-        break;
-      }
-
-      case 'file_tree_changed':
-        // Backend already debounces file-watch events — no debounce needed here.
-        if (sessionId) refreshModernTree(sessionId);
-        break;
-
-      case 'log':
-        addLog(
-          event.data.message as string,
-          safeLogLevel(event.data.level),
-          event.data.phase as string
-        );
-        if (
-          sessionId &&
-          event.data.message &&
-          (
-            (event.data.message as string).includes('successfully written to') ||
-            (event.data.message as string).includes('Fallback content') ||
-            (event.data.message as string).includes('custom local folder')
-          )
-        ) {
-          refreshModernTree(sessionId);
-        }
-        break;
-
-      case 'progress':
-        setProgress((event.data.percent as number) ?? 0);
-        setCurrentFile((event.data.currentFile as string) ?? '');
-        break;
-
-      case 'phase_change': {
-        const nextStatus = event.data.phase;
-        if (VALID_MIGRATION_STATUSES.has(nextStatus as MigrationStatus)) {
-          setStatus(nextStatus as MigrationStatus);
-        } else {
-          addLog(`Received unrecognized migration status "${String(nextStatus)}" — ignored.`, 'warning');
-        }
-        const nextPhaseStatus = event.data.status;
-        const safePhaseStatus = VALID_PHASE_STATUSES.has(nextPhaseStatus as MigrationPhase['status'])
-          ? (nextPhaseStatus as MigrationPhase['status'])
-          : undefined;
-        const phaseId = event.data.phaseId as string;
-        if (safePhaseStatus) {
-          // Enforce monotonic progress: a stage going active/done means every
-          // EARLIER stage is necessarily finished. Without this, a stage whose
-          // 'done' event never arrives (e.g. 'discovery' on a checkpoint-resumed
-          // Stage 1) stays stuck 'active'/spinning while later stages show done.
-          setPhases(prev => {
-            const idx = prev.findIndex(p => p.id === phaseId);
-            if (idx === -1) return prev;
-            return prev.map((p, i) => {
-              if (i < idx)  return p.status === 'done' ? p : { ...p, status: 'done' };
-              if (i === idx) return { ...p, status: safePhaseStatus };
-              return p;
-            });
-          });
-
-          // Per-stage timing — best-effort, timed client-side (no per-phase
-          // timestamps are persisted server-side to derive this from instead).
-          if (safePhaseStatus === 'active') {
-            phaseStartedAtRef.current[phaseId] = Date.now();
-          } else if (safePhaseStatus === 'done' || safePhaseStatus === 'error') {
-            const startedAt = phaseStartedAtRef.current[phaseId];
-            if (startedAt) {
-              setPhaseDurations(prev => ({ ...prev, [phaseId]: Date.now() - startedAt }));
-              delete phaseStartedAtRef.current[phaseId];
-            }
-          }
-        }
-        // These sub-stages have no 'complete' SSE event — pull results from session state instead.
-        if (
-          (event.data.phaseId === 'migration-planning' || event.data.phaseId === 'code-generation' || event.data.phaseId === 'verification') &&
-          safePhaseStatus === 'done' && sessionId
-        ) {
-          codeMigrationRef.current?.refreshFromSession(sessionId);
-        }
-        // HITL checkpoint reached — pull the resolved-graph summary to review.
-        if (nextStatus === 'awaiting-graph-review' && sessionId) {
-          fetchGraphSummary(backendUrl, sessionId)
-            .then(setGraphResolutionSummary)
-            .catch(() => { /* non-critical — the checkpoint UI will show empty */ });
-        }
-        if (sessionId) refreshModernTree(sessionId);
-        break;
-      }
-
-      case 'file_migrated':
-        setFileTree(prev => markMigrated(prev, event.data.path as string));
-        if (sessionId) refreshModernTree(sessionId);
-        break;
-
-      case 'complete': {
-        const payload = event.data as any;
-        setActiveTool(null);       // clear any stuck tool on completion
-        pendingToolsRef.current.clear();
-        if (payload && payload.isScan) {
-          setFileTree(payload.fileTree || []);
-          setDetectedStack(payload.detectedStack || null);
-          setStatus('idle');
-          // Stack Detection (Phase 0) is done once the scan completes — reflect it
-          // in the pipeline stepper instead of leaving it stuck on 'pending'.
-          setPhases(prev => prev.map(p => p.id === 'scan' ? { ...p, status: 'done' } : p));
-          closeSSE();
-          if (payload.detectedStack) {
-            addLog(`Scanned ${payload.detectedStack.fileCount} files`, 'success');
-            addLog(`Detected: ${payload.detectedStack.language} / ${payload.detectedStack.framework} / ${payload.detectedStack.database}`, 'info');
-            // → Notify upload success (SNS IDE MessageService.info pattern)
-            onNotify?.({
-              type: 'info',
-              message: `Project loaded: ${payload.detectedStack.fileCount} files · ${payload.detectedStack.language} / ${payload.detectedStack.framework}`,
-            });
-          }
-        } else {
-          setStatus('complete');
-          setProgress(100);
-          // Safety net: no phase can remain 'active' once the run completes.
-          // Flip lingering active→done, but leave 'pending' phases pending —
-          // Stage-2 phases (migration-planning onward) haven't run after Stage 1.
-          setPhases(prev => prev.map(p => p.status === 'active' ? { ...p, status: 'done' } : p));
-          closeSSE();
-          addLog('Migration complete.', 'success');
-        }
-        if (sessionId) refreshModernTree(sessionId);
-        break;
-      }
-
-      case 'error':
-        setActiveTool(null);
-        pendingToolsRef.current.clear();
-        setStatus('error');
-        addLog(event.data.message as string, 'error');
-        // → Notify error (SNS IDE MessageService.error pattern)
-        onNotify?.({
-          type: 'error',
-          message: `Pipeline error: ${event.data.message as string}`,
-          persistent: true,
-        });
-        closeSSE();
-        break;
-
-      case 'token_usage': {
-        const tu: TokenUsage = {
-          inputTokens:   (event.data.inputTokens   as number) ?? 0,
-          outputTokens:  (event.data.outputTokens  as number) ?? 0,
-          cachedInputTokens: (event.data.cachedInputTokens as number) ?? undefined,
-          readCachedInputTokens: (event.data.readCachedInputTokens as number) ?? undefined,
-          totalTokens:   (event.data.totalTokens   as number) ?? 0,
-          // null = no pricing rate configured — never default to 0 ("$0.0000" implies free)
-          estimatedCost: (event.data.estimatedCost as number | null) ?? null,
-          costIncomplete: (event.data.costIncomplete as boolean) ?? undefined,
-          model:         (event.data.model         as string) ?? undefined,
-        };
-        setTokenUsage(tu);
-        // Persist so TokensTab can read it without the SSE stream.
-        if (typeof window !== 'undefined') {
-          try {
-            localStorage.setItem('live_token_usage', JSON.stringify({ ...tu, updatedAt: Date.now() }));
-          } catch { /* storage full */ }
-        }
-        break;
-      }
-
-      case 'heartbeat':
-        break;
+  // ── Poll-result reducer ─────────────────────────────────────────────────────
+  // Applies one SessionStateResponse snapshot to UI state. Used both by the
+  // mount-restore fetch and by every live poll tick — a poll tick is just
+  // "fetch the same state endpoint again, apply it the same way."
+  const applyPollResult = useCallback((state: SessionStateResponse, opts: { isInitialRestore: boolean }) => {
+    const nextStatus = VALID_MIGRATION_STATUSES.has(state.status as MigrationStatus)
+      ? (state.status as MigrationStatus)
+      : null;
+    if (!nextStatus) {
+      addLog(`Received unrecognized migration status "${String(state.status)}" — ignored.`, 'warning');
+      return;
     }
-  }, [addLog, sessionId, refreshModernTree, backendUrl]); // closeSSE added below
 
-  const handleSSEError = useCallback((msg: string) => {
+    const prevStatus = prevStatusRef.current;
+    const transitioned = prevStatus !== nextStatus;
+
+    // Guard against restored backend state that doesn't persist the scan phase
+    // status — a detected stack definitionally means Phase 0 (scan) is complete.
+    const rawPhases = (state.phases && state.phases.length > 0 ? state.phases : MIGRATION_PHASES) as MigrationPhase[];
+    const validatedPhases = rawPhases.map(p =>
+      VALID_PHASE_STATUSES.has(p.status) ? p : { ...p, status: 'pending' as const }
+    );
+    const scanFixedPhases = state.detectedStack
+      ? validatedPhases.map(p => p.id === 'scan' && p.status === 'pending' ? { ...p, status: 'done' as const } : p)
+      : validatedPhases;
+    const reconciled = reconcilePhases(scanFixedPhases, nextStatus);
+
+    // Per-stage timing — best-effort, derived from phase status edges since no
+    // per-phase timestamps are persisted server-side.
+    if (!opts.isInitialRestore) {
+      reconciled.forEach(p => {
+        const prevPhase = phasesRef.current.find(pp => pp.id === p.id);
+        if (!prevPhase || prevPhase.status === p.status) return;
+        if (p.status === 'active') {
+          phaseStartedAtRef.current[p.id] = Date.now();
+        } else if (p.status === 'done' || p.status === 'error') {
+          const startedAt = phaseStartedAtRef.current[p.id];
+          if (startedAt) {
+            setPhaseDurations(prev => ({ ...prev, [p.id]: Date.now() - startedAt }));
+            delete phaseStartedAtRef.current[p.id];
+          }
+        }
+      });
+    }
+    phasesRef.current = reconciled;
+
+    setStatus(nextStatus);
+    setPhases(reconciled);
+    // The backend only ever persists whatever the last real progress value was
+    // (e.g. 98%, the last value before completion) — force 100 in-memory once
+    // the run is genuinely complete instead of showing a stuck 98%.
+    setProgress(nextStatus === 'complete' ? 100 : state.progress);
+    setCurrentFile(state.currentFile);
+    setFileTree(state.fileTree || []);
+    setDetectedStack(state.detectedStack ?? null);
+    codeMigrationRef.current?.setMigrationTaskList(state.migrationTaskList ?? null);
+    codeMigrationRef.current?.setRuleCoverageReport(state.ruleCoverageReport ?? null);
+    setGraphResolutionSummary(state.graphResolutionSummary ?? null);
+    setAnalysisReport(state.analysisReport ?? null);
+    setKnowledgeGraph(state.knowledgeGraph ?? null);
+
+    mergeBackendLogs(state.logs);
+    // Only overwrite if the backend actually reports these — an omitted field
+    // means "this backend hasn't implemented live tool activity yet", not
+    // "there is none right now".
+    if (state.activeTool !== undefined) setActiveTool(state.activeTool);
+    if (state.toolCallHistory !== undefined) setToolCallHistory(state.toolCallHistory);
+
+    // Content-keyed, not transition-keyed — runs every tick (and on restore)
+    // so a report that lands in MongoDB after status already reached
+    // 'complete' once before still gets pointed at. The full text lives in
+    // Stage1_Analysis.md (see STAGE1_ANALYSIS_VIRTUAL_PATH) — just a pointer here.
+    if (state.analysisReport && state.analysisReport !== lastLoggedAnalysisReportRef.current) {
+      lastLoggedAnalysisReportRef.current = state.analysisReport;
+      addLog(`Analysis report ready — open ${STAGE1_ANALYSIS_VIRTUAL_PATH} in the Explorer to read it.`, 'success');
+
+      // Also write it to disk if the user configured a Local Output Workspace
+      // Path — this backend runs locally, so it's the one piece that actually
+      // can reach the filesystem (AgentBuilder's workflows can't).
+      const localOutputPath = readSettings().localOutputPath.trim();
+      if (localOutputPath) {
+        writeLocalOutput(backendUrl, localOutputPath, STAGE1_ANALYSIS_VIRTUAL_PATH, state.analysisReport)
+          .then(result => addLog(`Analysis report also saved to ${result.path}`, 'success'))
+          .catch(err => addLog(`Could not save report locally: ${err instanceof Error ? err.message : 'Unknown error'}`, 'warning'));
+      }
+    }
+
+    // Same content-keyed pattern for the knowledge graph — fanned out into
+    // one file per category (entity/db/callFlow/imports/rule/integration/
+    // architecture/api/middleware/security/symbol/config) instead of one
+    // combined blob, mirroring the multi-graph analysis output this reflects.
+    if (state.knowledgeGraph && typeof state.knowledgeGraph === 'object') {
+      const graphJson = JSON.stringify(state.knowledgeGraph, null, 2);
+      if (graphJson !== lastWrittenKnowledgeGraphRef.current) {
+        lastWrittenKnowledgeGraphRef.current = graphJson;
+        const kg = state.knowledgeGraph as Record<string, unknown>;
+        const presentCategories = KNOWLEDGE_GRAPH_CATEGORIES.filter(({ key }) => kg[key] !== undefined);
+        addLog(`Knowledge graph ready — ${presentCategories.length} graph files under ${KNOWLEDGE_GRAPH_FOLDER}/ in the Explorer.`, 'success');
+
+        const localOutputPath = readSettings().localOutputPath.trim();
+        if (localOutputPath) {
+          for (const { key, fileName } of presentCategories) {
+            writeLocalOutput(backendUrl, localOutputPath, fileName, JSON.stringify(kg[key], null, 2), KNOWLEDGE_GRAPH_FOLDER)
+              .then(result => addLog(`${fileName} saved to ${result.path}`, 'success'))
+              .catch(err => addLog(`Could not save ${fileName} locally: ${err instanceof Error ? err.message : 'Unknown error'}`, 'warning'));
+          }
+        }
+      }
+    }
+
+    if (!opts.isInitialRestore && transitioned) {
+      if (prevStatus === 'scanning' && nextStatus === 'idle' && state.detectedStack) {
+        // The initial fast "just scan the files" step finished — ready for the
+        // user to click Start Stage-1 Analysis. Not the same as a full run
+        // completing (that lands on 'complete', not 'idle').
+        addLog(`Scanned ${state.detectedStack.fileCount} files`, 'success');
+        addLog(`Detected: ${state.detectedStack.language} / ${state.detectedStack.framework} / ${state.detectedStack.database}`, 'info');
+        onNotify?.({
+          type: 'info',
+          message: `Project loaded: ${state.detectedStack.fileCount} files · ${state.detectedStack.language} / ${state.detectedStack.framework}`,
+        });
+      } else if (nextStatus === 'complete') {
+        addLog('Stage-1 Analysis complete.', 'success');
+      } else if (nextStatus === 'error') {
+        setActiveTool(null);
+        const msg = state.errorMessage || 'Pipeline error — see backend logs for details.';
+        addLog(msg, 'error');
+        onNotify?.({ type: 'error', message: `Pipeline error: ${msg}`, persistent: true });
+      }
+
+      // These sub-stages have no dedicated "done" signal beyond the phase
+      // status itself — pull results from session state on the same edge.
+      const donePhaseIds = reconciled
+        .filter(p => p.status === 'done')
+        .map(p => p.id);
+      if (
+        donePhaseIds.includes('migration-planning') || donePhaseIds.includes('code-generation') || donePhaseIds.includes('verification')
+      ) {
+        codeMigrationRef.current?.refreshFromSession(state.sessionId);
+      }
+    }
+
+    if (!opts.isInitialRestore && nextStatus === 'awaiting-graph-review' && transitioned) {
+      fetchGraphSummary(backendUrl, state.sessionId)
+        .then(setGraphResolutionSummary)
+        .catch(() => { /* non-critical — the checkpoint UI will show empty */ });
+    }
+
+    // 'idle' alone isn't enough to stop polling anymore — a freshly-scanned
+    // project also sits at 'idle' while the Scanner Agent's external webhook
+    // is still working in the background (it updates detectedStack + the
+    // 'scan' phase directly in MongoDB, with no status change to signal it).
+    // Stopping polling the instant status is 'idle' meant nothing was left
+    // watching for that update, so it only ever appeared after a manual
+    // page refresh. Keep polling through 'idle' until stack detection is
+    // actually done.
+    const scanPhase = reconciled.find(p => p.id === 'scan');
+    const stillAwaitingScannerAgent = nextStatus === 'idle' && scanPhase?.status !== 'done';
+    if (!opts.isInitialRestore && TERMINAL_STATUSES.has(nextStatus) && !stillAwaitingScannerAgent) {
+      stopPolling();
+    }
+
+    prevStatusRef.current = nextStatus;
+    // `state.sessionId` (from the fetch response) is used instead of the outer
+    // `sessionId` state on purpose — see the phasesRef comment above, same
+    // stale-closure hazard. backendUrl/addLog/mergeBackendLogs/onNotify are
+    // all effectively stable, so this callback rarely needs to be recreated.
+  }, [addLog, mergeBackendLogs, onNotify, backendUrl]);
+
+  // ── Poll tick ────────────────────────────────────────────────────────────────
+  const pollTick = useCallback(async (sid: string) => {
+    const state = await fetchSessionState(backendUrl, sid);
+    applyPollResult(state, { isInitialRestore: false });
+    setLastEventAt(Date.now());
+    refreshModernTree(sid);
+    fetchSessionTokens(backendUrl, sid)
+      .then(data => {
+        if (data.tokenUsage && data.tokenUsage.totalTokens > 0) setTokenUsage(data.tokenUsage);
+      })
+      .catch(() => { /* non-critical — next tick will retry */ });
+  }, [backendUrl, applyPollResult, refreshModernTree]);
+
+  const handlePollError = useCallback((msg: string) => {
     addLog(msg, 'warning');
   }, [addLog]);
 
-  const { openSSE, closeSSE } = useSSE({ onEvent: handleSSEEvent, onError: handleSSEError });
+  const { startPolling, stopPolling } = usePolling({ onTick: pollTick, onError: handlePollError });
 
-  // Needs openSSE to reopen the stream after each sub-stage starts.
-  const codeMigration = useCodeMigration(backendUrl, sessionId, addLog, openSSE);
+  // Browser tabs get their JS timers heavily throttled while backgrounded —
+  // Chrome's Intensive Throttling can drop our 3s poll interval to as
+  // infrequently as once/minute after a few minutes unfocused. That's exactly
+  // what happens while switching over to check AgentBuilder/MongoDB in another
+  // window: the poll doesn't stop, it just silently slows way down, so
+  // switching back looks "stuck" even though the workflow genuinely finished.
+  // Force one immediate, un-throttled re-check the instant the tab regains
+  // focus instead of waiting for the throttled timer to eventually catch up.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && sessionId) {
+        pollTick(sessionId);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [sessionId, pollTick]);
+
+  // Needs startPolling to resume polling after each sub-stage starts.
+  const codeMigration = useCodeMigration(backendUrl, sessionId, addLog, startPolling, setStatus);
   codeMigrationRef.current = codeMigration;
 
   // Manual reconnect — for when the Live panel's stale-connection detector fires
   // and the user clicks "Reconnect" rather than reloading the whole page.
   const reconnect = useCallback(() => {
     if (!sessionId) return;
-    closeSSE();
-    setLastEventAt(Date.now()); // don't immediately re-flag as stale before the first event arrives
-    addLog('Reconnecting to live stream…', 'info');
-    openSSE(`${backendUrl}/api/stream/${sessionId}`);
-  }, [sessionId, backendUrl, openSSE, closeSSE, addLog]);
+    setLastEventAt(Date.now()); // don't immediately re-flag as stale before the next tick lands
+    addLog('Reconnecting…', 'info');
+    startPolling(sessionId);
+  }, [sessionId, startPolling, addLog]);
 
-  // Full session restore on mount — reconnects SSE if a migration is still running server-side.
+  // Full session restore on mount — resumes polling if a migration is still running server-side.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const saved = localStorage.getItem('last_session_id');
@@ -524,46 +568,25 @@ export function useMigration(
     fetchSessionState(backendUrl, saved)
       .then(state => {
         setSessionId(state.sessionId);
-        setFileTree(state.fileTree || []);
-        setDetectedStack(state.detectedStack);
-        // If a stack was detected, Phase 0 (scan) is definitionally complete —
-        // guard against restored backend state that doesn't persist the scan
-        // phase status, so the stepper doesn't revert it to 'pending' on refresh.
-        const rawRestoredPhases = state.phases.length > 0 ? (state.phases as MigrationPhase[]) : MIGRATION_PHASES;
-        const scanFixedPhases = state.detectedStack
-          ? rawRestoredPhases.map(p => p.id === 'scan' && p.status === 'pending' ? { ...p, status: 'done' as const } : p)
-          : rawRestoredPhases;
-        // Reconcile: the backend can persist an inconsistent phases array (e.g.
-        // 'discovery' stuck 'active' while later phases are 'done'). Applying the
-        // same monotonic rules the live handlers use stops the reload from
-        // restoring a spinner that never resolves.
-        setPhases(reconcilePhases(scanFixedPhases, state.status as MigrationStatus));
-        // Same class of bug as the phases reconciliation above: the live 'complete'
-        // handler force-sets progress to 100, but that's an in-memory-only
-        // correction — the backend only ever persists whatever the last real
-        // 'progress' SSE event said (e.g. 98%, the last value before completion).
-        // Restoring that raw value verbatim shows "Stage 1 Complete" next to a
-        // stuck 98% instead of 100%.
-        setProgress(state.status === 'complete' ? 100 : state.progress);
-        setCurrentFile(state.currentFile);
-        setStatus(state.status as MigrationStatus);
+        applyPollResult(state, { isInitialRestore: true });
+        prevStatusRef.current = VALID_MIGRATION_STATUSES.has(state.status as MigrationStatus)
+          ? (state.status as MigrationStatus)
+          : 'idle';
         // runStartedAt/phaseDurations deliberately NOT restored here — the backend
         // doesn't persist a run-start timestamp or per-phase timing, and faking one
         // (e.g. "started now") would misrepresent how long the run has actually
         // been going. The elapsed timer simply doesn't show until the next real
         // handleStart/handleUpload call sets it for real.
-        codeMigrationRef.current?.setMigrationTaskList(state.migrationTaskList ?? null);
-        codeMigrationRef.current?.setRuleCoverageReport(state.ruleCoverageReport ?? null);
-        // Restore the HITL checkpoint if the session was reloaded while awaiting review.
-        setGraphResolutionSummary(state.graphResolutionSummary ?? null);
 
-        const stillRunning = [
-          'scanning', 'planning', 'discovery', 'file-analysis',
-          'graph-resolution', 'section-writing', 'assembly', 'migration-planning',
-        ].includes(state.status);
-        if (stillRunning) {
-          addLog('Reconnected to in-progress migration.', 'info');
-          openSSE(`${backendUrl}/api/stream/${state.sessionId}`);
+        // Also resume polling for a fresh 'idle' scan still awaiting the
+        // Scanner Agent's async update — same reasoning as the stop-condition
+        // in applyPollResult above. Without this, refreshing mid-wait would
+        // leave nothing watching for MongoDB to change, same bug as before.
+        const scanPhase = (state.phases || []).find(p => p.id === 'scan');
+        const stillAwaitingScannerAgent = state.status === 'idle' && scanPhase?.status !== 'done';
+        if (RESUMABLE_STATUSES.includes(state.status as MigrationStatus) || stillAwaitingScannerAgent) {
+          addLog('Reconnected — watching for updates.', 'info');
+          startPolling(state.sessionId);
         }
       })
       .catch(() => {
@@ -577,9 +600,10 @@ export function useMigration(
   const handleUpload = useCallback(async (files: FileList | File[], explicitPaths?: string[]) => {
     addLog('Reading project files...', 'info');
     setStatus('scanning');
+    prevStatusRef.current = 'scanning';
     // Reset optimistically — otherwise a stale lastEventAt from a PREVIOUS run
     // could make the connection-lost detector false-trigger the instant this new
-    // run's status flips to "running", before its own first SSE event arrives.
+    // run's status flips to "running", before its own first poll tick lands.
     setLastEventAt(Date.now());
 
     const settings = readSettings();
@@ -618,7 +642,7 @@ export function useMigration(
       addLog(`Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
       setStatus('error');
     }
-  }, [addLog, backendUrl, openSSE]);
+  }, [addLog, backendUrl]);
 
   // ── Clone from GitHub → Scan ─────────────────────────────────────────────────
   // Same "new project" entry point as handleUpload, sourced from a GitHub repo
@@ -627,6 +651,7 @@ export function useMigration(
   const handleCloneFromGithub = useCallback(async (repoUrl: string, branch?: string) => {
     addLog(`Cloning ${repoUrl}${branch ? ` (${branch})` : ''}...`, 'info');
     setStatus('scanning');
+    prevStatusRef.current = 'scanning';
     setLastEventAt(Date.now());
 
     const settings = readSettings();
@@ -652,79 +677,91 @@ export function useMigration(
       addLog(`Clone failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
       setStatus('error');
     }
-  }, [addLog, backendUrl, openSSE]);
+  }, [addLog, backendUrl]);
 
   // Shared tail for both entry points above: reset session-scoped display
-  // state and open the SSE stream for the newly created session.
+  // state and start polling for the newly created session.
   function beginScanSession(sid: string, sourceLabel: string) {
     setSessionId(sid);
     setLogs([]);
+    seenLogIdsRef.current = new Set();
     setProgress(0);
     setFileTree([]);
     setDetectedStack(null);
-    addLog(`${sourceLabel} Connecting stream to session ${sid}...`, 'info');
-    openSSE(`${backendUrl}/api/stream/${sid}`);
+    addLog(`${sourceLabel} Watching session ${sid}...`, 'info');
+    startPolling(sid);
   }
 
-  // ── Start Migration ─────────────────────────────────────────────────────────
+  // ── Scanner Agent — separate external webhook, fired AFTER the project is
+  // already uploaded/saved (handleUpload above). Only tells the AgentBuilder
+  // workflow which session to work on — it reads the files back out of
+  // MongoDB itself instead of receiving them again over this call. ─────────
+  const [isTriggeringScannerAgent, setIsTriggeringScannerAgent] = useState(false);
+  const handleTriggerScannerAgent = useCallback(async () => {
+    if (!sessionId) return;
+    const settings = readSettings();
+    if (!settings.agentBuilderWebhookUrl.trim()) {
+      addLog('AgentBuilder Webhook Base URL is not configured — set it in Settings first.', 'error');
+      return;
+    }
+
+    setIsTriggeringScannerAgent(true);
+    addLog('Triggering Scanner Agent...', 'command');
+    try {
+      await triggerScannerAgent(settings.agentBuilderWebhookUrl, sessionId);
+      addLog('Scanner Agent triggered.', 'success');
+      // Safety net — make sure polling is actually running to catch the
+      // MongoDB update this triggers asynchronously in the background.
+      startPolling(sessionId);
+    } catch (err: unknown) {
+      addLog(`Scanner Agent failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+    } finally {
+      setIsTriggeringScannerAgent(false);
+    }
+  }, [sessionId, addLog, startPolling]);
+
+  // ── Start Stage-1 Analysis ──────────────────────────────────────────────────
+  // Single-pass: fires the Stage-1 Analysis Agent webhook (same pattern as
+  // Scanner Agent — it reads files back out of MongoDB itself), which analyzes
+  // the whole project in one AI call and writes back status/phases/analysisReport.
+  // Optimistically set to 'discovery' (a real, non-terminal MigrationStatus) so
+  // polling has an honest reason to keep running until the agent's MongoDB
+  // write actually lands — same fix as the Scanner Agent polling bug, just
+  // using a real status this time instead of a special-cased condition.
   const handleStart = useCallback(async (target: TargetStack) => {
     if (!sessionId) return;
 
-    setStatus('scanning');
+    const settings = readSettings();
+    if (!settings.agentBuilderWebhookUrl.trim()) {
+      addLog('AgentBuilder Webhook Base URL is not configured — set it in Settings first.', 'error');
+      return;
+    }
+
+    setStatus('discovery');
+    prevStatusRef.current = 'discovery';
     setProgress(0);
     setPhases(prev => prev.map(p => {
       if (p.id === 'scan') return { ...p, status: 'done' };
+      if (['discovery', 'file-analysis', 'graph-resolution', 'section-writing', 'assembly'].includes(p.id)) {
+        return { ...p, status: 'active' };
+      }
       return { ...p, status: 'pending' };
     }));
     setRunStartedAt(Date.now());
     setPhaseDurations({});
     phaseStartedAtRef.current = {};
-    // Same reason as handleUpload above — avoid a stale lastEventAt from a
-    // previous run false-triggering the connection-lost detector immediately.
     setLastEventAt(Date.now());
-    addLog('Starting migration...', 'command');
-
-    const settings = readSettings();
-    const combinedApiKey =
-      settings.allApiKeys.anthropic   ||
-      settings.allApiKeys.openai      ||
-      settings.allApiKeys.google      ||
-      settings.allApiKeys.grok        ||
-      settings.allApiKeys.groq        ||
-      settings.allApiKeys.openrouter  ||
-      settings.allApiKeys.mistral     ||
-      settings.allApiKeys.huggingface ||
-      '';
+    addLog('Starting Stage-1 Analysis...', 'command');
 
     try {
-      await startMigration(backendUrl, {
-        sessionId,
-        targetStack: target,
-        apiKey:          combinedApiKey,
-        localOutputPath: settings.localOutputPath,
-        apiKeys:         settings.allApiKeys,
-        agentsConfig:    (() => {
-          try { return JSON.parse(localStorage.getItem('ai_config_agents') || 'null'); } catch { return null; }
-        })(),
-        toolsConfig:     settings.toolsConfig,
-        aliasesConfig:   settings.aliasesConfig,
-        promptFragments: settings.promptFragments,
-        modelPricing:    settings.modelPricing,
-        googleMaxRetries:          settings.googleMaxRetries,
-        googleRetryDelayRateLimit: settings.googleRetryDelayRateLimit,
-        googleRetryDelayOther:     settings.googleRetryDelayOther,
-        googleTimeoutMs:           settings.googleTimeoutMs,
-        mistralMaxRetries:          settings.mistralMaxRetries,
-        mistralRetryDelayRateLimit: settings.mistralRetryDelayRateLimit,
-        mistralRetryDelayOther:     settings.mistralRetryDelayOther,
-      });
-
-      openSSE(`${backendUrl}/api/stream/${sessionId}`);
+      await triggerStage1Analysis(settings.agentBuilderWebhookUrl, sessionId, target);
+      addLog('Stage-1 Analysis Agent triggered.', 'success');
+      startPolling(sessionId);
     } catch (err: unknown) {
-      addLog(`Migration start failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      addLog(`Stage-1 Analysis failed to start: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
       setStatus('error');
     }
-  }, [sessionId, addLog, backendUrl, openSSE]);
+  }, [sessionId, addLog, startPolling]);
 
   // ── HITL — Continue to Analysis Report ─────────────────────────────────────
   const handleContinueAnalysis = useCallback(async () => {
@@ -741,13 +778,13 @@ export function useMigration(
     try {
       await continueAnalysis(backendUrl, sessionId, combinedApiKey, settings.allApiKeys);
       setGraphResolutionSummary(null);   // leaving the checkpoint
-      openSSE(`${backendUrl}/api/stream/${sessionId}`);
+      startPolling(sessionId);
     } catch (err: unknown) {
       addLog(`Continue failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
     } finally {
       setIsCheckpointBusy(false);
     }
-  }, [sessionId, addLog, backendUrl, openSSE]);
+  }, [sessionId, addLog, backendUrl, startPolling]);
 
   // ── HITL — Skip to Code Migration ──────────────────────────────────────────
   const handleSkipToStage2 = useCallback(async () => {
@@ -758,22 +795,22 @@ export function useMigration(
     try {
       await skipToStage2(backendUrl, sessionId);
       setGraphResolutionSummary(null);   // leaving the checkpoint
-      openSSE(`${backendUrl}/api/stream/${sessionId}`);
+      startPolling(sessionId);
     } catch (err: unknown) {
       addLog(`Skip failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
     } finally {
       setIsCheckpointBusy(false);
     }
-  }, [sessionId, addLog, backendUrl, openSSE]);
+  }, [sessionId, addLog, backendUrl, startPolling]);
 
   // ── Stop ─────────────────────────────────────────────────────────────────────
   const handleStop = useCallback(async () => {
-    closeSSE();
+    stopPolling();
     setActiveTool(null);
-    pendingToolsRef.current.clear();
     try {
       if (sessionId) await stopMigration(backendUrl, sessionId);
       setStatus('idle');
+      prevStatusRef.current = 'idle';
       // Without this, status='idle' would coexist with the last non-zero progress
       // value — exactly the stale state the Live panel's idle+realPct check treats
       // as "still running", so it would flash "Running X%" again right after Stop.
@@ -786,31 +823,50 @@ export function useMigration(
       addLog(msg, 'error');
       onNotify?.({ type: 'error', message: msg, persistent: true });
     }
-  }, [sessionId, addLog, backendUrl, closeSSE, onNotify]);
+  }, [sessionId, addLog, backendUrl, stopPolling, onNotify]);
 
   // ── Pause ────────────────────────────────────────────────────────────────────
   const handlePause = useCallback(async () => {
-    closeSSE();
+    stopPolling();
     setActiveTool(null);
-    pendingToolsRef.current.clear();
     try {
       if (sessionId) await pauseMigration(backendUrl, sessionId);
       setStatus('paused');
+      prevStatusRef.current = 'paused';
       addLog('Migration paused.', 'warning');
     } catch (err: unknown) {
       const msg = `Pause request failed: ${err instanceof Error ? err.message : 'Unknown error'}. The migration may still be running on the server.`;
       addLog(msg, 'error');
       onNotify?.({ type: 'error', message: msg, persistent: true });
     }
-  }, [sessionId, addLog, backendUrl, closeSSE, onNotify]);
+  }, [sessionId, addLog, backendUrl, stopPolling, onNotify]);
 
   // ── Select File ──────────────────────────────────────────────────────────────
   const handleSelectFile = useCallback(async (
     path: string,
-    setActiveEditorTab: (t: 'code' | 'settings' | 'aiconfig') => void
+    setActiveEditorTab: (t: 'code') => void
   ) => {
     setSelectedFile(path);
     setActiveEditorTab('code');
+
+    // Virtual files, synthesized on the frontend — content already lives in
+    // state, no backend round-trip (they aren't real stored files, so
+    // /api/file would 404 on them).
+    if (path === STAGE1_ANALYSIS_VIRTUAL_PATH) {
+      setLegacyCode(analysisReport);
+      setModernCode(null);
+      return;
+    }
+    const kgMatch = KNOWLEDGE_GRAPH_CATEGORIES.find(({ fileName }) => path === knowledgeGraphVirtualPath(fileName));
+    if (kgMatch) {
+      const categoryData = knowledgeGraph && typeof knowledgeGraph === 'object'
+        ? (knowledgeGraph as Record<string, unknown>)[kgMatch.key]
+        : undefined;
+      setLegacyCode(categoryData !== undefined ? JSON.stringify(categoryData, null, 2) : null);
+      setModernCode(null);
+      return;
+    }
+
     if (!sessionId) return;
     try {
       const data = await fetchFileContent(backendUrl, sessionId, path);
@@ -820,7 +876,7 @@ export function useMigration(
       setLegacyCode('// Could not load file content');
       setModernCode(null);
     }
-  }, [sessionId, backendUrl]);
+  }, [sessionId, backendUrl, analysisReport, knowledgeGraph]);
 
   // ── Clear selected file (close editor) ─────────────────────────────────────
   const clearSelectedFile = useCallback(() => {
@@ -842,11 +898,11 @@ export function useMigration(
   // this just stops the tab from displaying it. Callers are responsible for
   // guarding against calling this mid-run (Stage-2 sub-stages etc).
   const handleNewProject = useCallback(() => {
-    closeSSE();
+    stopPolling();
     setActiveTool(null);
-    pendingToolsRef.current.clear();
 
     setStatus('idle');
+    prevStatusRef.current = 'idle';
     setSessionId(null);
     setFileTree([]);
     setDetectedStack(null);
@@ -854,12 +910,15 @@ export function useMigration(
     setLegacyCode(null);
     setModernCode(null);
     setLogs([]);
+    seenLogIdsRef.current = new Set();
     setProgress(0);
     setCurrentFile('');
     setPhases(MIGRATION_PHASES);
     setModernFileTree([]);
     setModernFolderBasename('');
     setTokenUsage(null);
+    setAnalysisReport(null);
+    setKnowledgeGraph(null);
     setGraphResolutionSummary(null);
     setIsCheckpointBusy(false);
     setToolCallHistory([]);
@@ -867,6 +926,8 @@ export function useMigration(
     setRunStartedAt(null);
     setPhaseDurations({});
     phaseStartedAtRef.current = {};
+    lastLoggedAnalysisReportRef.current = null;
+    lastWrittenKnowledgeGraphRef.current = null;
 
     codeMigrationRef.current?.setMigrationTaskList(null);
     codeMigrationRef.current?.setRuleCoverageReport(null);
@@ -875,12 +936,12 @@ export function useMigration(
       localStorage.removeItem('last_session_id');
       localStorage.removeItem('live_token_usage');
     }
-  }, [closeSSE]);
+  }, [stopPolling]);
 
   return {
     status, sessionId, fileTree, detectedStack, selectedFile,
     legacyCode, modernCode, logs, progress, currentFile, phases,
-    modernFileTree, modernFolderBasename, tokenUsage,
+    modernFileTree, modernFolderBasename, tokenUsage, analysisReport, knowledgeGraph,
     isRunning, hasProject,
     activeTool,
     toolCallHistory,
@@ -892,7 +953,9 @@ export function useMigration(
     isPlanning, isGenerating, isVerifying,
     graphResolutionSummary, isCheckpointBusy,
     lastEventAt, runStartedAt, phaseDurations, reconnect,
-    handleUpload, handleCloneFromGithub, handleStart,
+    handleUpload,
+    isTriggeringScannerAgent, handleTriggerScannerAgent,
+    handleCloneFromGithub, handleStart,
     handleContinueAnalysis, handleSkipToStage2,
     handleStartMigrationPlanning: codeMigration.handleStartMigrationPlanning,
     handleStartCodeGeneration: codeMigration.handleStartCodeGeneration,

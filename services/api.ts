@@ -1,6 +1,7 @@
 // Central API communication layer — pure typed fetch wrappers, no business logic, no hardcoded URLs.
 
-import type { DetectedStack, FileNode, TargetStack, MigrationTaskEntry, RuleCoverageEntry, GraphResolutionSummary } from '@/types';
+import type { DetectedStack, FileNode, TargetStack, MigrationTaskEntry, RuleCoverageEntry, GraphResolutionSummary, LogEntry } from '@/types';
+import type { ToolCallHistoryItem } from '@/components/live-status/types';
 
 // ── Response Types ────────────────────────────────────────────────────────────
 
@@ -46,27 +47,6 @@ export interface SessionTokensResponse {
     estimatedCost: number | null;
   }[];
   sessionId: string;
-}
-
-export interface MigrateStartPayload {
-  sessionId: string;
-  targetStack: TargetStack;
-  apiKey: string;
-  localOutputPath: string;
-  apiKeys: Record<string, string>;
-  agentsConfig: unknown;
-  toolsConfig: Record<string, boolean>;
-  aliasesConfig: Record<string, string>;
-  promptFragments: Record<string, string>;
-  /** User-supplied per-model $/1M-token rates — see hooks/useSettings.ts. */
-  modelPricing?: Record<string, { inputPerM: number; outputPerM: number; cacheWritePerM?: number; cacheReadPerM?: number }>;
-  googleMaxRetries?: number;
-  googleRetryDelayRateLimit?: number;
-  googleRetryDelayOther?: number;
-  googleTimeoutMs?: number;
-  mistralMaxRetries?: number;
-  mistralRetryDelayRateLimit?: number;
-  mistralRetryDelayOther?: number;
 }
 
 // ── API Functions ─────────────────────────────────────────────────────────────
@@ -115,51 +95,8 @@ export async function cloneFromGithub(
   return res.json() as Promise<{ sessionId: string }>;
 }
 
-export async function startMigration(
-  backendUrl: string,
-  payload: MigrateStartPayload
-): Promise<void> {
-  const res = await fetch(`${backendUrl}/api/migrate/start`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) throw new Error(await res.text());
-}
-
 // Requires the analysis pipeline to have already completed; apiKey/apiKeys must be
 // resent since it wipes them from the session on completion.
-export async function startMigrationPlanning(
-  backendUrl: string,
-  sessionId: string,
-  targetStack: TargetStack,
-  apiKey: string,
-  apiKeys: Record<string, string>
-): Promise<void> {
-  const res = await fetch(`${backendUrl}/api/migrate/plan`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId, targetStack, apiKey, apiKeys }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-}
-
-// Requires a migration task list from /plan to already exist.
-export async function startCodeGeneration(
-  backendUrl: string,
-  sessionId: string,
-  targetStack: TargetStack,
-  apiKey: string,
-  apiKeys: Record<string, string>
-): Promise<void> {
-  const res = await fetch(`${backendUrl}/api/migrate/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId, targetStack, apiKey, apiKeys }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-}
-
 // Requires at least one 'generated' task from /generate.
 export async function startVerification(
   backendUrl: string,
@@ -238,6 +175,46 @@ export interface SessionStateResponse {
   fullProjectCheckResult: FullProjectCheckResult | null;
   planSanityWarning: string | null;
   reportedIssues: ReportedIssue[];
+  // ── Polling-only fields (SSE replacement) ──────────────────────────────────
+  // Optional: the old push-based transport (EventSource) got these from
+  // dedicated event types. Polling reads them straight off this same
+  // response instead. All optional so a minimal backend that hasn't
+  // implemented them yet still works — the UI just shows less detail
+  // (milestone logs only, no live tool activity) until they're added.
+  /** Human-readable message for status === 'error'. */
+  errorMessage?: string;
+  /** Execution log lines — frontend dedupes by id, so returning the full
+   *  backlog (or just new lines) each poll both work. */
+  logs?: LogEntry[];
+  /** Tool call currently in flight, or null if none. */
+  activeTool?: { name: string; args: string } | null;
+  /** Completed tool calls, newest first, capped at 20. */
+  toolCallHistory?: ToolCallHistoryItem[];
+  /** Stage-1 Analysis result (markdown) — null until that agent completes. */
+  analysisReport?: string | null;
+  /** Entities/relationships extracted alongside analysisReport — shape is
+   * whatever the agent produces (nodes/edges), not a fixed contract. */
+  knowledgeGraph?: unknown;
+}
+
+// Writes generated output (e.g. the Stage-1 Analysis report) to a folder on
+// this machine's own disk — meaningful because the backend runs locally,
+// unlike the AgentBuilder workflows (cloud-hosted, no access to local disk).
+// Only called when Settings > Local Output Workspace Path is actually set.
+export async function writeLocalOutput(
+  backendUrl: string,
+  localOutputPath: string,
+  fileName: string,
+  content: string,
+  subDir?: string
+): Promise<{ ok: boolean; path: string }> {
+  const res = await fetch(`${backendUrl}/api/local-output/write`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ localOutputPath, fileName, content, subDir }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{ ok: boolean; path: string }>;
 }
 
 // A human-reported issue against the current session, diagnosed (read-only —
@@ -419,6 +396,88 @@ export function downloadFile(backendUrl: string, sessionId: string, fileName: st
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+}
+
+// ── AgentBuilder agent webhooks ───────────────────────────────────────────────
+// Every agent lives under the same AgentBuilder base URL (e.g.
+// https://api.agents.snsihub.ai/webhook) and differs only by its own path —
+// so the base is configured once in Settings and each agent's path is appended
+// here.
+const AGENT_PATHS = {
+  scanner: 'api/scanner-agent',
+  stage1: 'api/stage1-analysis-agent',
+  migrationPlanning: 'api/migration-planning-agent',
+  codeGeneration: 'api/code-generation-agent',
+} as const;
+
+function agentUrl(webhookBaseUrl: string, agent: keyof typeof AGENT_PATHS): string {
+  return `${webhookBaseUrl.replace(/\/+$/, '')}/${AGENT_PATHS[agent]}`;
+}
+
+// Fires after the project is already uploaded/saved via scanProject() above —
+// this just tells the external AgentBuilder workflow which session to work on;
+// it reads the actual files back out of MongoDB itself rather than receiving
+// them again over this call.
+export async function triggerScannerAgent(
+  webhookBaseUrl: string,
+  sessionId: string
+): Promise<void> {
+  const res = await fetch(agentUrl(webhookBaseUrl, 'scanner'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+// Stage-1 Analysis — single-pass: reads files back out of MongoDB itself
+// (same pattern as Scanner Agent), analyzes the whole project in one AI call,
+// and writes back status/phases/analysisReport.
+export async function triggerStage1Analysis(
+  webhookBaseUrl: string,
+  sessionId: string,
+  targetStack: TargetStack
+): Promise<void> {
+  const res = await fetch(agentUrl(webhookBaseUrl, 'stage1'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, targetStack }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+// Migration Planning — reads the Stage-1 knowledge graph + report back out of
+// MongoDB itself (same pattern as the other agents) and produces
+// migrationTaskList: legacy-file -> target-file mappings with dependency
+// order, ready for Code Generation to consume later.
+export async function triggerMigrationPlanning(
+  webhookBaseUrl: string,
+  sessionId: string,
+  targetStack: TargetStack
+): Promise<void> {
+  const res = await fetch(agentUrl(webhookBaseUrl, 'migrationPlanning'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, targetStack }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+// Code Generation — reads migrationTaskList + knowledge graph + source files
+// back out of MongoDB itself (same pattern as the other agents) and produces
+// the actual target-stack code for every planned task in one call, writing
+// to modernFileTree/modernFileContents and flipping each task's status.
+export async function triggerCodeGeneration(
+  webhookBaseUrl: string,
+  sessionId: string,
+  targetStack: TargetStack
+): Promise<void> {
+  const res = await fetch(agentUrl(webhookBaseUrl, 'codeGeneration'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, targetStack }),
+  });
+  if (!res.ok) throw new Error(await res.text());
 }
 
 // ── GitHub OAuth Device Flow ────────────────────────────────────────────────

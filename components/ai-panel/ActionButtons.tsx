@@ -2,20 +2,22 @@
 // that's the scan itself; "Start Migration" does.
 'use client';
 
-import { Play, Pause, Square, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Play, Pause, Square, CheckCircle2, AlertTriangle, Bot } from 'lucide-react';
 import type { MigrationStatus, DetectedStack } from '@/types';
 import { useNotifications } from '@/context/NotificationContext';
 
 interface Props {
   status:        MigrationStatus;
   detectedStack: DetectedStack | null;
-  hasApiKey:     boolean;
-  hasModel:      boolean;
   hasProject:    boolean;
   planPhaseDone: boolean;
   onStart:  () => void;
   onStop:   () => void;
   onPause:  () => void;
+  /** Separate external webhook, fired after the project is already
+   * uploaded/saved — shown above Start Stage-1 Analysis. */
+  isTriggeringScannerAgent?: boolean;
+  onTriggerScannerAgent?: () => void;
   /** Stage 2 — enabled once Stage 1 is complete and the 4 target fields are filled in. */
   canStartMigration?:   boolean;
   migrationDisabledReason?: string;
@@ -37,8 +39,9 @@ interface Props {
 }
 
 export default function ActionButtons({
-  status, hasApiKey, hasModel, hasProject, detectedStack, planPhaseDone,
+  status, hasProject, detectedStack, planPhaseDone,
   onStart, onStop, onPause,
+  isTriggeringScannerAgent, onTriggerScannerAgent,
   canStartMigration, migrationDisabledReason, isPlanning, migrationPlanningDone,
   onStartMigration,
   isGenerating, codeGenerationDone, generatedCount, failedCount, onStartGeneration,
@@ -51,15 +54,9 @@ export default function ActionButtons({
   const isError    = status === 'error';
 
   const buttonLabel = isComplete ? 'Re-run Stage-1 Analysis' : 'Start Stage-1 Analysis';
-  const canStart = hasProject && hasApiKey && hasModel;
+  const canStart = hasProject;
 
-  const disabledReason = !hasProject
-    ? 'Open a project folder first'
-    : !hasApiKey
-    ? 'Add an API key in Settings first'
-    : !hasModel
-    ? 'Select a model in Settings first'
-    : '';
+  const disabledReason = !hasProject ? 'Open a project folder first' : '';
 
   const { notify } = useNotifications();
 
@@ -75,8 +72,29 @@ export default function ActionButtons({
   return (
     <div style={{ marginTop: 'auto', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
 
-      {/* Start / Re-run — shown when idle, complete, or error */}
-      {(isIdle || isComplete || isError) && (
+      {/* Scanner Agent — separate external webhook, shown once a project is
+          open, before Stage-1 Analysis. Fires after upload/save already
+          happened — this just tells the AgentBuilder workflow which session
+          to work on. */}
+      {hasProject && onTriggerScannerAgent && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <button
+            className="btn-premium btn-premium--primary"
+            onClick={onTriggerScannerAgent}
+            disabled={isTriggeringScannerAgent}
+            style={{ opacity: isTriggeringScannerAgent ? 0.45 : 1 }}
+          >
+            <Bot size={13} />
+            <span>{isTriggeringScannerAgent ? 'Triggering Scanner Agent...' : 'Scanner Agent'}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Start / Re-run — shown when idle, complete, or error, AND only once
+          Scanner Agent has actually completed stack detection (planPhaseDone).
+          Stays hidden before that — Stage-1 Analysis isn't meaningful to run
+          against a project whose stack hasn't been detected yet. */}
+      {(isIdle || isComplete || isError) && planPhaseDone && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <button
             className="btn-premium btn-premium--primary"

@@ -1,5 +1,5 @@
-// Operational Panel orchestrator — manages provider/model/API-key state; rendering
-// is delegated to focused sub-components in components/ai-panel/.
+// Operational Panel orchestrator — manages provider/model + target-config state;
+// rendering is delegated to focused sub-components in components/ai-panel/.
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -11,7 +11,6 @@ import type { ReportedIssue } from '@/services/api';
 import { readSettings } from '@/hooks/useSettings';
 import { useLiveStatus } from '@/hooks/useLiveStatus';
 import { detectCheckpoint } from '@/utils/checkpoint';
-import { ALL_PROVIDERS } from '@/constants/models';
 
 import StackBadge         from '@/components/ai-panel/StackBadge';
 import TargetConfig       from '@/components/ai-panel/TargetConfig';
@@ -37,6 +36,10 @@ interface Props {
   onStart:          (target: TargetStack) => void;
   onStop:           () => void;
   onPause:          () => void;
+  // Scanner Agent — separate external webhook, fired after the project is
+  // already uploaded/saved, before Stage-1 Analysis.
+  isTriggeringScannerAgent?: boolean;
+  onTriggerScannerAgent?: () => void;
   // HITL graph-review checkpoint (status 'awaiting-graph-review')
   graphResolutionSummary?: GraphResolutionSummary | null;
   isCheckpointBusy?: boolean;
@@ -85,6 +88,7 @@ export default function AIPanel({
   detectedStack, status, phases, progress, currentFile,
   logs, hasProject, activeTool, toolCallHistory,
   onStart, onStop, onPause,
+  isTriggeringScannerAgent, onTriggerScannerAgent,
   graphResolutionSummary, isCheckpointBusy, onContinueAnalysis, onSkipToStage2,
   lastEventAt = null, runStartedAt = null, phaseDurations = {}, onReconnect,
   settingsTrigger = 0, onSettingsSaved, width,
@@ -93,10 +97,9 @@ export default function AIPanel({
   isGenerating, onStartGeneration,
   isVerifying, onStartVerification,
 }: Props) {
-  // Model and apiKey start as '' — readSettings() fills them immediately in useEffect below
+  // Model starts as '' — readSettings() fills it immediately in useEffect below
   const [provider, setProvider] = useState<AIProvider>('google');
   const [model,    setModel]    = useState('');
-  const [apiKey,   setApiKey]   = useState('');
 
   // ── User-typed target stack values (persisted to localStorage) ─────────────
   const [targetFramework, setTargetFramework] = useState('');
@@ -179,7 +182,6 @@ export default function AIPanel({
     const s = readSettings();
     setProvider(s.provider);
     setModel(s.model);
-    setApiKey(s.apiKey);
 
     setTargetFramework(getLocal('setting_target_framework'));
     setTargetDb(getLocal('setting_target_database'));
@@ -187,11 +189,10 @@ export default function AIPanel({
     setTargetLang(getLocal('setting_target_lang'));
   }, [settingsTrigger]);
 
-  // ── Re-sync model + key when provider changes ─────────────────────────────
+  // ── Re-sync model when provider changes ────────────────────────────────────
   useEffect(() => {
     const s = readSettings();
     setModel(s.model);
-    setApiKey(s.apiKey);
   }, [provider]);
 
   // ── Setting save helper ───────────────────────────────────────────────────
@@ -199,20 +200,6 @@ export default function AIPanel({
     setLocal(key, value);
     onSettingsSaved?.();
   }, [onSettingsSaved]);
-
-  // ── API key + model checks ──────────────────────────────────────────────────
-  const hasApiKey = (() => {
-    if (apiKey.trim()) return true;
-    if (typeof window === 'undefined') return false;
-    return ALL_PROVIDERS.some(p => {
-      const raw = localStorage.getItem(`setting_${p}_api_key`);
-      if (!raw) return false;
-      try { return !!(JSON.parse(raw)?.trim()); } catch { return !!raw.trim(); }
-    });
-  })();
-
-  // Model must be explicitly set by the user in Settings — no hardcoded fallback
-  const hasModel = model.trim().length > 0;
 
   // ── Start handler — sends exactly what the user typed, no auto-fill ────────
   const handleStart = useCallback(() => {
@@ -236,13 +223,9 @@ export default function AIPanel({
     targetLang.trim().length > 0 &&
     testFramework.trim().length > 0;
 
-  const canStartMigration = hasApiKey && hasModel && allTargetFieldsFilled;
+  const canStartMigration = allTargetFieldsFilled;
   const migrationDisabledReason = !allTargetFieldsFilled
     ? 'Fill in all 4 Target Configuration fields first'
-    : !hasApiKey
-    ? 'Add an API key in Settings first'
-    : !hasModel
-    ? 'Select a model in Settings first'
     : '';
 
   const handleStartMigration = useCallback(() => {
@@ -423,9 +406,9 @@ export default function AIPanel({
             <ActionButtons
               status={status}
               detectedStack={detectedStack}
-              hasApiKey={hasApiKey}
-              hasModel={hasModel}
               hasProject={hasProject}
+              isTriggeringScannerAgent={isTriggeringScannerAgent}
+              onTriggerScannerAgent={onTriggerScannerAgent}
               planPhaseDone={scanPhaseDone}
               onStart={handleStart}
               onStop={onStop}

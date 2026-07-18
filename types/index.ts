@@ -75,6 +75,38 @@ export interface FileNode {
   language?: string;
 }
 
+// A virtual, synthesized-on-the-frontend entry (not a real file the backend
+// stored) — appended to the displayed file tree once a Stage-1 Analysis
+// report exists, so it's readable in the Explorer/CodeViewer like any other
+// file without needing a dedicated report viewer.
+export const STAGE1_ANALYSIS_VIRTUAL_PATH = 'Stage1_Analysis.md';
+
+// Same pattern — the knowledge graph is a single Mixed object on the backend
+// keyed by category (entity/db/callFlow/imports/rule/integration/architecture/
+// api/middleware/security/symbol/config); the frontend fans it out into one
+// virtual file per category inside a virtual folder, so Explorer looks like
+// the multi-graph analysis output this mirrors.
+export const KNOWLEDGE_GRAPH_FOLDER = 'Knowledge Graph';
+
+export const KNOWLEDGE_GRAPH_CATEGORIES: { key: string; fileName: string }[] = [
+  { key: 'entity', fileName: 'entity-graph.json' },
+  { key: 'db', fileName: 'db-graph.json' },
+  { key: 'callFlow', fileName: 'call-flow-graph.json' },
+  { key: 'imports', fileName: 'imports-graph.json' },
+  { key: 'rule', fileName: 'rule-graph.json' },
+  { key: 'integration', fileName: 'integration-graph.json' },
+  { key: 'architecture', fileName: 'architecture-graph.json' },
+  { key: 'api', fileName: 'api-graph.json' },
+  { key: 'middleware', fileName: 'middleware-graph.json' },
+  { key: 'security', fileName: 'security-graph.json' },
+  { key: 'symbol', fileName: 'symbol-graph.json' },
+  { key: 'config', fileName: 'config-graph.json' },
+];
+
+export function knowledgeGraphVirtualPath(fileName: string): string {
+  return `${KNOWLEDGE_GRAPH_FOLDER}/${fileName}`;
+}
+
 export interface MigrationPhase {
   id: string;
   label: string;

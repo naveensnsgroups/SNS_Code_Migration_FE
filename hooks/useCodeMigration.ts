@@ -1,14 +1,14 @@
 // Migration Planning / Code Generation / Verification state and handlers.
-// refreshFromSession pulls results from session state, since these sub-stages have no SSE 'complete' event.
+// refreshFromSession pulls results from session state, since these sub-stages have no dedicated "done" event.
 
 'use client';
 
 import { useCallback, useState } from 'react';
-import type { MigrationTaskEntry, RuleCoverageEntry, TargetStack, LogLevel } from '@/types';
+import type { MigrationTaskEntry, RuleCoverageEntry, TargetStack, LogLevel, MigrationStatus } from '@/types';
 import type { ReportedIssue } from '@/services/api';
 import {
-  startMigrationPlanning,
-  startCodeGeneration,
+  triggerMigrationPlanning,
+  triggerCodeGeneration,
   startVerification,
   fetchSessionState,
   reportIssue,
@@ -50,7 +50,8 @@ export function useCodeMigration(
   backendUrl: string,
   sessionId:  string | null,
   addLog:     LogFn,
-  openSSE:    (url: string) => void,
+  startPolling: (sessionId: string) => void,
+  setStatus:  (s: MigrationStatus) => void,
 ): UseCodeMigrationReturn {
   const [migrationTaskList, setMigrationTaskList]   = useState<MigrationTaskEntry[] | null>(null);
   const [ruleCoverageReport, setRuleCoverageReport] = useState<RuleCoverageEntry[] | null>(null);
@@ -88,41 +89,66 @@ export function useCodeMigration(
     setTimeout(poll, 5000);
   }, [sessionId, backendUrl, refreshFromSession]);
 
+  // Fires the Migration Planning Agent webhook (same pattern as Scanner Agent
+  // and Stage-1 Analysis — it reads the knowledge graph + report back out of
+  // MongoDB itself rather than receiving them again over this call).
+  // targetStack IS sent here — it's picked fresh on this panel and isn't
+  // reliably present on the session (Stage-1's workflow only uses it for the
+  // report prompt, it never persists it back to MongoDB).
+  // Optimistically set to 'migration-planning' (a real, non-terminal
+  // MigrationStatus) so polling has an honest reason to keep running until
+  // the agent's MongoDB write actually lands — same fix as Stage-1's polling
+  // bug.
   const handleStartMigrationPlanning = useCallback(async (target: TargetStack) => {
     if (!sessionId) return;
+
+    const settings = readSettings();
+    if (!settings.agentBuilderWebhookUrl.trim()) {
+      addLog('AgentBuilder Webhook Base URL is not configured — set it in Settings first.', 'error');
+      return;
+    }
 
     setMigrationTaskList(null);
     setRuleCoverageReport(null);
     setPlanSanityWarning(null);
+    setStatus('migration-planning');
     addLog('Starting migration planning...', 'command');
 
-    const settings = readSettings();
-    const combinedApiKey = resolveCombinedApiKey(settings.allApiKeys);
-
     try {
-      await startMigrationPlanning(backendUrl, sessionId, target, combinedApiKey, settings.allApiKeys);
-      // Reopen the stream — the prior stage's SSE connection already closed.
-      openSSE(`${backendUrl}/api/stream/${sessionId}`);
+      await triggerMigrationPlanning(settings.agentBuilderWebhookUrl, sessionId, target);
+      addLog('Migration Planning Agent triggered.', 'success');
+      startPolling(sessionId);
     } catch (err: unknown) {
       addLog(`Migration planning failed to start: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      setStatus('error');
     }
-  }, [sessionId, addLog, backendUrl, openSSE]);
+  }, [sessionId, addLog, startPolling, setStatus]);
 
+  // Fires the Code Generation Agent webhook (same pattern as the other
+  // agents — reads migrationTaskList + knowledge graph + source files back
+  // out of MongoDB itself). Optimistically set to 'code-generation' so
+  // polling keeps running until the agent's MongoDB write lands.
   const handleStartCodeGeneration = useCallback(async (target: TargetStack) => {
     if (!sessionId) return;
 
+    const settings = readSettings();
+    if (!settings.agentBuilderWebhookUrl.trim()) {
+      addLog('AgentBuilder Webhook Base URL is not configured — set it in Settings first.', 'error');
+      return;
+    }
+
+    setStatus('code-generation');
     addLog('Starting code generation...', 'command');
 
-    const settings = readSettings();
-    const combinedApiKey = resolveCombinedApiKey(settings.allApiKeys);
-
     try {
-      await startCodeGeneration(backendUrl, sessionId, target, combinedApiKey, settings.allApiKeys);
-      openSSE(`${backendUrl}/api/stream/${sessionId}`);
+      await triggerCodeGeneration(settings.agentBuilderWebhookUrl, sessionId, target);
+      addLog('Code Generation Agent triggered.', 'success');
+      startPolling(sessionId);
     } catch (err: unknown) {
       addLog(`Code generation failed to start: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      setStatus('error');
     }
-  }, [sessionId, addLog, backendUrl, openSSE]);
+  }, [sessionId, addLog, startPolling, setStatus]);
 
   const handleStartVerification = useCallback(async (target: TargetStack) => {
     if (!sessionId) return;
@@ -134,11 +160,11 @@ export function useCodeMigration(
 
     try {
       await startVerification(backendUrl, sessionId, target, combinedApiKey, settings.allApiKeys);
-      openSSE(`${backendUrl}/api/stream/${sessionId}`);
+      startPolling(sessionId);
     } catch (err: unknown) {
       addLog(`Verification failed to start: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
     }
-  }, [sessionId, addLog, backendUrl, openSSE]);
+  }, [sessionId, addLog, backendUrl, startPolling]);
 
   return {
     migrationTaskList, ruleCoverageReport, planSanityWarning, reportedIssues,

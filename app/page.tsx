@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState, useEffect, useRef } from 'react';
-import { Files, Search, Bot, Settings, Zap, Terminal, Wrench, Database, DollarSign } from 'lucide-react';
+import { Files, Search, Settings, Zap, Terminal, Wrench, Database, DollarSign } from 'lucide-react';
 import GithubLogo from '@/components/icons/GithubLogo';
 import ExplorerPanel  from '@/components/ExplorerPanel';
 import CodeViewer     from '@/components/CodeViewer';
@@ -9,7 +9,6 @@ import AIPanel        from '@/components/AIPanel';
 import TerminalPanel  from '@/components/TerminalPanel';
 import SearchPanel    from '@/components/SearchPanel';
 import SettingsTab    from '@/components/SettingsTab';
-import AIConfigTab    from '@/components/AIConfigTab';
 import AccountMenu, { type GithubUser } from '@/components/AccountMenu';
 import GithubSignInDialog from '@/components/GithubSignInDialog';
 import { NotificationBell } from '@/components/notifications/NotificationCenter';
@@ -17,7 +16,8 @@ import { useMigration }  from '@/hooks/useMigration';
 import { usePanelResize } from '@/hooks/useResize';
 import { useBackendUrl }  from '@/hooks/useSettings';
 import { useNotifications } from '@/context/NotificationContext';
-import type { MigrationStatus } from '@/types';
+import type { MigrationStatus, FileNode } from '@/types';
+import { STAGE1_ANALYSIS_VIRTUAL_PATH, KNOWLEDGE_GRAPH_FOLDER, KNOWLEDGE_GRAPH_CATEGORIES, knowledgeGraphVirtualPath } from '@/types';
 
 // ── Status Label Map ───────────────────────────────────────────────────────────
 
@@ -47,7 +47,7 @@ export default function HomePage() {
   const [activeTab, setActiveTab]               = useState<'explorer' | 'search'>('explorer');
   const [sidebarOpen, setSidebarOpen]           = useState(true);
   const [aiPanelOpen, setAiPanelOpen]           = useState(false);
-  const [activeEditorTab, setActiveEditorTab]   = useState<'code' | 'settings' | 'aiconfig'>('code');
+  const [activeEditorTab, setActiveEditorTab]   = useState<'code' | 'settings'>('code');
   const [settingsTrigger, setSettingsTrigger]   = useState(0);
   const [accountMenuOpen, setAccountMenuOpen]   = useState(false);
   // GitHub account — null until signed in, restored from localStorage on mount.
@@ -72,13 +72,15 @@ export default function HomePage() {
     selectedFile, legacyCode, modernCode,
     logs, progress, currentFile, phases,
     modernFileTree, modernFolderBasename,
-    tokenUsage, isRunning, hasProject,
+    tokenUsage, analysisReport, knowledgeGraph, isRunning, hasProject,
     activeTool, toolCallHistory,
     migrationTaskList, ruleCoverageReport, planSanityWarning, reportedIssues, handleReportIssue,
     isPlanning, isGenerating, isVerifying,
     graphResolutionSummary, isCheckpointBusy,
     lastEventAt, runStartedAt, phaseDurations, reconnect,
-    handleUpload, handleCloneFromGithub, handleStart, handleContinueAnalysis, handleSkipToStage2,
+    handleUpload,
+    isTriggeringScannerAgent, handleTriggerScannerAgent,
+    handleCloneFromGithub, handleStart, handleContinueAnalysis, handleSkipToStage2,
     handleStartMigrationPlanning, handleStartCodeGeneration,
     handleStartVerification,
     handleStop, handlePause, handleSelectFile, clearSelectedFile,
@@ -87,10 +89,9 @@ export default function HomePage() {
 
   // Also pings a native OS notification for checkpoint-worthy transitions, so you
   // don't have to keep the tab focused to notice one was reached. Gated on all of:
-  // the user opted in (Settings > Desktop Notifications), the browser actually
-  // granted permission (requested at opt-in time, in SettingsTab's click handler —
-  // never here, since Notification.requestPermission() needs a real user gesture),
-  // and the tab isn't currently focused (no point pinging what's already visible).
+  // the user opted in (setting_general_desktop_notifications), the browser
+  // actually granted permission, and the tab isn't currently focused (no point
+  // pinging what's already visible).
   const notifyCheckpoint = useCallback((opts: Parameters<typeof notify>[0], nativeBody?: string) => {
     notify(opts);
     if (!nativeBody) return;
@@ -114,7 +115,7 @@ export default function HomePage() {
         break;
       case 'complete':
         notifyCheckpoint(
-          { type: 'success', message: 'Stage-1 Analysis complete! View Stage1_Analysis.md in Explorer.', timeout: 8000 },
+          { type: 'success', message: 'Stage-1 Analysis complete! See the report in the Terminal.', timeout: 8000 },
           'Stage 1 Analysis complete — review it and configure code migration.'
         );
         break;
@@ -192,6 +193,42 @@ export default function HomePage() {
     handleSelectFile(path, setActiveEditorTab);
   }, [handleSelectFile]);
 
+  // Explorer tree + virtual entries once Stage-1 Analysis output exists —
+  // synthesized here for display only; the real fileTree state stays
+  // backend-only (see handleSelectFile's special case for reading them back).
+  const knowledgeGraphFiles: FileNode[] = knowledgeGraph && typeof knowledgeGraph === 'object'
+    ? KNOWLEDGE_GRAPH_CATEGORIES
+        .filter(({ key }) => (knowledgeGraph as Record<string, unknown>)[key] !== undefined)
+        .map(({ fileName }) => ({
+          name: fileName,
+          path: knowledgeGraphVirtualPath(fileName),
+          type: 'file' as const,
+          migrated: false,
+          language: 'json',
+        } satisfies FileNode))
+    : [];
+
+  const virtualEntries: FileNode[] = [
+    ...(analysisReport
+      ? [{
+          name: 'Stage1_Analysis.md',
+          path: STAGE1_ANALYSIS_VIRTUAL_PATH,
+          type: 'file' as const,
+          migrated: false,
+          language: 'md',
+        } satisfies FileNode]
+      : []),
+    ...(knowledgeGraphFiles.length > 0
+      ? [{
+          name: KNOWLEDGE_GRAPH_FOLDER,
+          path: KNOWLEDGE_GRAPH_FOLDER,
+          type: 'directory' as const,
+          children: knowledgeGraphFiles,
+        } satisfies FileNode]
+      : []),
+  ];
+  const explorerFileTree = virtualEntries.length > 0 ? [...fileTree, ...virtualEntries] : fileTree;
+
   // ── GitHub account (device-flow OAuth) ─────────────────────────────────────
   // Restore a previous sign-in on mount. The token lives in localStorage (same
   // model the app already uses for provider API keys) so clone/push can reuse it.
@@ -237,7 +274,6 @@ export default function HomePage() {
   const activityItems = [
     { icon: <Files size={21} />,    id: 'explorer', title: 'Explorer',                type: 'sidebar'       as const },
     { icon: <Search size={21} />,   id: 'search',   title: 'Search',                  type: 'sidebar'       as const },
-    { icon: <Bot size={21} />,      id: 'aiconfig', title: 'AI Configuration',         type: 'tab'           as const, tabId: 'aiconfig' as const },
     { icon: <Zap size={21} />,      id: 'pipeline', title: 'Operational Panel',        type: 'right-sidebar' as const },
   ];
 
@@ -260,7 +296,6 @@ export default function HomePage() {
               Session: {sessionId}
             </span>
           )}
-          <button className="title-bar__btn" onClick={() => setActiveEditorTab('settings')}>Settings</button>
         </div>
       </header>
 
@@ -271,9 +306,7 @@ export default function HomePage() {
         <nav className="activity-bar">
           {activityItems.map(item => {
             const isActive =
-              item.type === 'sidebar'       ? sidebarOpen && activeTab === item.id :
-              item.type === 'right-sidebar' ? aiPanelOpen :
-              activeEditorTab === item.tabId;
+              item.type === 'sidebar' ? sidebarOpen && activeTab === item.id : aiPanelOpen;
 
             return (
               <button
@@ -283,10 +316,8 @@ export default function HomePage() {
                 onClick={() => {
                   if (item.type === 'sidebar') {
                     activeTab === item.id ? setSidebarOpen(o => !o) : (setActiveTab(item.id as 'explorer' | 'search'), setSidebarOpen(true));
-                  } else if (item.type === 'right-sidebar') {
-                    setAiPanelOpen(o => !o);
                   } else {
-                    setActiveEditorTab(activeEditorTab === item.tabId ? 'code' : item.tabId!);
+                    setAiPanelOpen(o => !o);
                   }
                 }}
               >
@@ -334,7 +365,7 @@ export default function HomePage() {
         {/* Sidebar */}
         {sidebarOpen && activeTab === 'explorer' && (
           <ExplorerPanel
-            fileTree={fileTree}
+            fileTree={explorerFileTree}
             selectedFile={selectedFile}
             onSelectFile={onSelectFile}
             onUpload={handleUploadNewProject}
@@ -365,15 +396,6 @@ export default function HomePage() {
               onSettingsSaved={handleSettingsSaved}
               onClose={() => setActiveEditorTab('code')}
               settingsTrigger={settingsTrigger}
-            />
-          ) : activeEditorTab === 'aiconfig' ? (
-            <AIConfigTab
-              onClose={() => setActiveEditorTab('code')}
-              onSettingsSaved={handleSettingsSaved}
-              settingsTrigger={settingsTrigger}
-              tokenUsage={tokenUsage ?? undefined}
-              backendUrl={backendUrl}
-              sessionId={sessionId}
             />
           ) : (
             <CodeViewer
@@ -410,6 +432,8 @@ export default function HomePage() {
               onStart={handleStart}
               onStop={handleStop}
               onPause={handlePause}
+              isTriggeringScannerAgent={isTriggeringScannerAgent}
+              onTriggerScannerAgent={handleTriggerScannerAgent}
               graphResolutionSummary={graphResolutionSummary}
               isCheckpointBusy={isCheckpointBusy}
               onContinueAnalysis={handleContinueAnalysis}
