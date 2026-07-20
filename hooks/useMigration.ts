@@ -133,6 +133,9 @@ export interface UseMigrationReturn {
   detectedStack: DetectedStack | null;
   selectedFile: string | null;
   legacyCode: string | null;
+  /** Base64 of the raw bytes — populated only when selectedFile is a binary
+   * image and the backend stored it (see FileContent.binaryContent). */
+  legacyBinaryContent: string | null;
   modernCode: string | null;
   logs: LogEntry[];
   progress: number;
@@ -209,6 +212,7 @@ export function useMigration(
   const [detectedStack, setDetectedStack] = useState<DetectedStack | null>(null);
   const [selectedFile, setSelectedFile]   = useState<string | null>(null);
   const [legacyCode, setLegacyCode]       = useState<string | null>(null);
+  const [legacyBinaryContent, setLegacyBinaryContent] = useState<string | null>(null);
   const [modernCode, setModernCode]       = useState<string | null>(null);
   const [logs, setLogs]                   = useState<LogEntry[]>([]);
   const [progress, setProgress]           = useState(0);
@@ -896,6 +900,7 @@ export function useMigration(
     // /api/file would 404 on them).
     if (path === STAGE1_ANALYSIS_VIRTUAL_PATH) {
       setLegacyCode(analysisReport);
+      setLegacyBinaryContent(null);
       setModernCode(null);
       return;
     }
@@ -905,6 +910,7 @@ export function useMigration(
         ? (knowledgeGraph as Record<string, unknown>)[kgMatch.key]
         : undefined;
       setLegacyCode(categoryData !== undefined ? JSON.stringify(categoryData, null, 2) : null);
+      setLegacyBinaryContent(null);
       setModernCode(null);
       return;
     }
@@ -913,9 +919,11 @@ export function useMigration(
     try {
       const data = await fetchFileContent(backendUrl, sessionId, path);
       setLegacyCode(data.content ?? null);
+      setLegacyBinaryContent(data.binaryContent ?? null);
       setModernCode(data.modernContent ?? null);
     } catch {
       setLegacyCode('// Could not load file content');
+      setLegacyBinaryContent(null);
       setModernCode(null);
     }
   }, [sessionId, backendUrl, analysisReport, knowledgeGraph]);
@@ -924,6 +932,7 @@ export function useMigration(
   const clearSelectedFile = useCallback(() => {
     setSelectedFile(null);
     setLegacyCode(null);
+    setLegacyBinaryContent(null);
     setModernCode(null);
   }, []);
 
@@ -950,6 +959,7 @@ export function useMigration(
     setDetectedStack(null);
     setSelectedFile(null);
     setLegacyCode(null);
+    setLegacyBinaryContent(null);
     setModernCode(null);
     setLogs([]);
     seenLogIdsRef.current = new Set();
@@ -985,7 +995,7 @@ export function useMigration(
 
   return {
     status, sessionId, fileTree, detectedStack, selectedFile,
-    legacyCode, modernCode, logs, progress, currentFile, phases,
+    legacyCode, legacyBinaryContent, modernCode, logs, progress, currentFile, phases,
     modernFileTree, modernFolderBasename, tokenUsage, analysisReport, knowledgeGraph,
     validFileCount, emptyFileCount, emptyFiles,
     isRunning, hasProject,

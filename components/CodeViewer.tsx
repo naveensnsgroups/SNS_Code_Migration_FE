@@ -10,6 +10,9 @@ interface Props {
   modernCode: string | null;
   legacyFile: string | null;
   modernFile: string | null;
+  /** Base64 of the raw bytes — populated only when legacyFile is a binary
+   * image and the backend actually stored it (see FileContent.binaryContent). */
+  legacyBinaryContent?: string | null;
   onClose?: () => void;
   onDownload?: (fileName: string) => void;
 }
@@ -18,7 +21,17 @@ interface Props {
 // a file that can never exist.
 const DOWNLOADABLE_FILES = ['Stage1_Analysis.md'];
 
-export default function CodeViewer({ legacyCode, modernCode, legacyFile, modernFile, onClose, onDownload }: Props) {
+const IMAGE_MIME_BY_EXT: Record<string, string> = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+  webp: 'image/webp', bmp: 'image/bmp', ico: 'image/x-icon', svg: 'image/svg+xml',
+};
+
+function imageMimeType(fileName: string): string | null {
+  const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
+  return IMAGE_MIME_BY_EXT[ext] ?? null;
+}
+
+export default function CodeViewer({ legacyCode, modernCode, legacyFile, modernFile, legacyBinaryContent = null, onClose, onDownload }: Props) {
   const fileName = legacyFile?.split('/').pop() ?? legacyFile ?? '';
   const isDownloadable = DOWNLOADABLE_FILES.includes(fileName) && !!onDownload;
   // Use explicit null checks, not truthiness: an empty (0-byte) file has content
@@ -65,6 +78,7 @@ export default function CodeViewer({ legacyCode, modernCode, legacyFile, modernF
   }
 
   const hasValidLegacy = legacyCode !== null && !legacyCode.startsWith('// Error reading');
+  const legacyImageMime = legacyFile ? imageMimeType(legacyFile) : null;
 
   return (
     <div className="editor-area">
@@ -118,7 +132,23 @@ export default function CodeViewer({ legacyCode, modernCode, legacyFile, modernF
             <div className="editor-pane__label">
               Legacy — {legacyFile}
             </div>
-            <MonacoCodeBlock code={legacyCode!} fileName={legacyFile} />
+            {legacyImageMime ? (
+              legacyBinaryContent ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '24px', overflow: 'auto' }}>
+                  <img
+                    src={`data:${legacyImageMime};base64,${legacyBinaryContent}`}
+                    alt={legacyFile?.split('/').pop() ?? legacyFile ?? ''}
+                    style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                  />
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)', fontSize: '13px', textAlign: 'center', padding: '24px' }}>
+                  Binary file — no preview stored for this session.<br />Re-scan the project to enable image previews.
+                </div>
+              )
+            ) : (
+              <MonacoCodeBlock code={legacyCode!} fileName={legacyFile} />
+            )}
           </div>
         )}
         {modernCode !== null && (

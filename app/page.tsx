@@ -69,7 +69,7 @@ export default function HomePage() {
   // ── Migration state + handlers ─────────────────────────────────────────────
   const {
     status, sessionId, fileTree, detectedStack,
-    selectedFile, legacyCode, modernCode,
+    selectedFile, legacyCode, legacyBinaryContent, modernCode,
     logs, progress, currentFile, phases,
     modernFileTree, modernFolderBasename,
     tokenUsage, analysisReport, knowledgeGraph, isRunning, hasProject,
@@ -401,6 +401,7 @@ export default function HomePage() {
           ) : (
             <CodeViewer
               legacyCode={legacyCode}
+              legacyBinaryContent={legacyBinaryContent}
               modernCode={modernCode}
               legacyFile={selectedFile}
               modernFile={selectedFile ?? null}

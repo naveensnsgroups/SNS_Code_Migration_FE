@@ -13,6 +13,9 @@ export interface ScanResponse {
 
 export interface FileContentResponse {
   content: string | null;
+  /** Base64 of the raw bytes — populated only for binary files (images, icons,
+   * etc.); null for text files. See backend FileContent schema / scan.js. */
+  binaryContent: string | null;
   modernContent: string | null;
 }
 
