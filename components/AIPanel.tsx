@@ -3,10 +3,10 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Activity, CheckCircle2, ArrowDown } from 'lucide-react';
+import { Activity, CheckCircle2, ArrowDown, AlertTriangle } from 'lucide-react';
 import type { DetectedStack, MigrationStatus, MigrationPhase, TargetStack, AIProvider, MigrationTaskEntry, RuleCoverageEntry, GraphResolutionSummary } from '@/types';
 import type { LogEntry } from '@/types';
-import type { ReportedIssue } from '@/services/api';
+import type { ReportedIssue, VerificationReport } from '@/services/api';
 
 import { readSettings } from '@/hooks/useSettings';
 import { useLiveStatus } from '@/hooks/useLiveStatus';
@@ -27,6 +27,9 @@ interface Props {
   validFileCount?:  number;
   emptyFileCount?:  number;
   emptyFiles?:      Array<{ path: string; reason: string }>;
+  /** Cross-check of the analysis report against actual source files — null
+   * until the Verification Agent runs. */
+  verificationReport?: VerificationReport | null;
   status:           MigrationStatus;
   phases:           MigrationPhase[];
   progress:         number;
@@ -88,7 +91,7 @@ function setLocal(key: string, value: string) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function AIPanel({
-  detectedStack, validFileCount, emptyFileCount, emptyFiles, status, phases, progress, currentFile,
+  detectedStack, validFileCount, emptyFileCount, emptyFiles, verificationReport, status, phases, progress, currentFile,
   logs, hasProject, activeTool, toolCallHistory,
   onStart, onStop, onPause,
   isTriggeringScannerAgent, onTriggerScannerAgent,
@@ -105,7 +108,11 @@ export default function AIPanel({
   const [model,    setModel]    = useState('');
 
   // ── User-typed target stack values (persisted to localStorage) ─────────────
-  const [targetFramework, setTargetFramework] = useState('');
+  // Split frontend/backend framework — a migration targets each independently
+  // (e.g. React -> Next.js, Express -> NestJS), so one shared field can't
+  // represent both. See the TargetStack type comment for the full reasoning.
+  const [targetFrontendFramework, setTargetFrontendFramework] = useState('');
+  const [targetBackendFramework,  setTargetBackendFramework]  = useState('');
   const [targetDb,        setTargetDb]        = useState('');
   const [targetLang,      setTargetLang]      = useState('');
   const [testFramework,   setTestFramework]   = useState('');
@@ -130,7 +137,7 @@ export default function AIPanel({
   const [targetConfigUnlocked, setTargetConfigUnlocked] = useState(false);
   // Snapshot taken at the moment of unlocking, restored verbatim on Cancel — the
   // same "edit / save / cancel" pattern as any settings form.
-  const targetConfigSnapshotRef = useRef<{ framework: string; db: string; lang: string; test: string } | null>(null);
+  const targetConfigSnapshotRef = useRef<{ frontendFramework: string; backendFramework: string; db: string; lang: string; test: string } | null>(null);
 
   const targetConfigHasPlan = !!migrationTaskList && migrationTaskList.length > 0;
   const targetConfigBusy    = !!isPlanning || !!isGenerating || !!isVerifying;
@@ -186,7 +193,8 @@ export default function AIPanel({
     setProvider(s.provider);
     setModel(s.model);
 
-    setTargetFramework(getLocal('setting_target_framework'));
+    setTargetFrontendFramework(getLocal('setting_target_frontend_framework'));
+    setTargetBackendFramework(getLocal('setting_target_backend_framework'));
     setTargetDb(getLocal('setting_target_database'));
     setTestFramework(getLocal('setting_testing_framework'));
     setTargetLang(getLocal('setting_target_lang'));
@@ -209,7 +217,8 @@ export default function AIPanel({
     onStart({
       provider,
       model,
-      framework:     targetFramework,
+      frontendFramework: targetFrontendFramework,
+      backendFramework:  targetBackendFramework,
       database:      targetDb,
       language:      targetLang,
       // Send exactly what the user typed — no hardcoded fallback, same
@@ -217,25 +226,27 @@ export default function AIPanel({
       testFramework,
       outputMode:    'direct',
     });
-  }, [provider, model, targetFramework, targetDb, targetLang, testFramework, onStart]);
+  }, [provider, model, targetFrontendFramework, targetBackendFramework, targetDb, targetLang, testFramework, onStart]);
 
   // ── Stage 2 — Start Migration Planning ─────────────────────────────────────
   const allTargetFieldsFilled =
-    targetFramework.trim().length > 0 &&
+    targetFrontendFramework.trim().length > 0 &&
+    targetBackendFramework.trim().length > 0 &&
     targetDb.trim().length > 0 &&
     targetLang.trim().length > 0 &&
     testFramework.trim().length > 0;
 
   const canStartMigration = allTargetFieldsFilled;
   const migrationDisabledReason = !allTargetFieldsFilled
-    ? 'Fill in all 4 Target Configuration fields first'
+    ? 'Fill in all 5 Target Configuration fields first'
     : '';
 
   const handleStartMigration = useCallback(() => {
     onStartMigration?.({
       provider,
       model,
-      framework:     targetFramework,
+      frontendFramework: targetFrontendFramework,
+      backendFramework:  targetBackendFramework,
       database:      targetDb,
       language:      targetLang,
       testFramework,
@@ -245,21 +256,23 @@ export default function AIPanel({
     // current right now — re-lock immediately so the section reflects "this is
     // what's being planned with", not an editable state mid-run.
     setTargetConfigUnlocked(false);
-  }, [provider, model, targetFramework, targetDb, targetLang, testFramework, onStartMigration]);
+  }, [provider, model, targetFrontendFramework, targetBackendFramework, targetDb, targetLang, testFramework, onStartMigration]);
 
   // ── Target Configuration edit / cancel (only relevant once a plan exists —
   // see targetConfigLocked above) ─────────────────────────────────────────────
   const handleRequestEditTargetConfig = useCallback(() => {
     targetConfigSnapshotRef.current = {
-      framework: targetFramework, db: targetDb, lang: targetLang, test: testFramework,
+      frontendFramework: targetFrontendFramework, backendFramework: targetBackendFramework,
+      db: targetDb, lang: targetLang, test: testFramework,
     };
     setTargetConfigUnlocked(true);
-  }, [targetFramework, targetDb, targetLang, testFramework]);
+  }, [targetFrontendFramework, targetBackendFramework, targetDb, targetLang, testFramework]);
 
   const handleCancelEditTargetConfig = useCallback(() => {
     const snap = targetConfigSnapshotRef.current;
     if (snap) {
-      setTargetFramework(snap.framework); save('setting_target_framework', snap.framework);
+      setTargetFrontendFramework(snap.frontendFramework); save('setting_target_frontend_framework', snap.frontendFramework);
+      setTargetBackendFramework(snap.backendFramework);   save('setting_target_backend_framework', snap.backendFramework);
       setTargetDb(snap.db);               save('setting_target_database', snap.db);
       setTargetLang(snap.lang);           save('setting_target_lang', snap.lang);
       setTestFramework(snap.test);        save('setting_testing_framework', snap.test);
@@ -278,13 +291,14 @@ export default function AIPanel({
     onStartGeneration?.({
       provider,
       model,
-      framework:     targetFramework,
+      frontendFramework: targetFrontendFramework,
+      backendFramework:  targetBackendFramework,
       database:      targetDb,
       language:      targetLang,
       testFramework,
       outputMode:    'direct',
     });
-  }, [provider, model, targetFramework, targetDb, targetLang, testFramework, onStartGeneration]);
+  }, [provider, model, targetFrontendFramework, targetBackendFramework, targetDb, targetLang, testFramework, onStartGeneration]);
 
   // ── Stage 2 — Start Verification ───────────────────────────────────────────
   const verifiedCount = (migrationTaskList ?? []).filter(t => t.status === 'verified').length;
@@ -296,13 +310,14 @@ export default function AIPanel({
     onStartVerification?.({
       provider,
       model,
-      framework:     targetFramework,
+      frontendFramework: targetFrontendFramework,
+      backendFramework:  targetBackendFramework,
       database:      targetDb,
       language:      targetLang,
       testFramework,
       outputMode:    'direct',
     });
-  }, [provider, model, targetFramework, targetDb, targetLang, testFramework, onStartVerification]);
+  }, [provider, model, targetFrontendFramework, targetBackendFramework, targetDb, targetLang, testFramework, onStartVerification]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -352,7 +367,8 @@ export default function AIPanel({
               validFileCount={validFileCount}
               emptyFileCount={emptyFileCount}
               emptyFiles={emptyFiles}
-              targetFramework={targetFramework}
+              targetFrontendFramework={targetFrontendFramework}
+              targetBackendFramework={targetBackendFramework}
               targetDb={targetDb}
               targetLang={targetLang}
               targetTestFramework={testFramework}
@@ -376,12 +392,52 @@ export default function AIPanel({
               </div>
             )}
 
+            {/* Verification Agent warning: the analysis report/knowledge graph
+                completed, but its claims didn't all check out against the actual
+                source files. Distinct from the checkpoint banner above — that one
+                says "your turn to continue", this one says "double-check before
+                you trust what you're continuing with". Only critical-severity
+                issues are listed here; minor ones are still in verificationReport
+                for anyone who opens the raw file in Explorer. */}
+            {verificationReport && verificationReport.verdict === 'needs-review' && (
+              <div className="stage1-checkpoint" style={{ borderColor: 'var(--text-warning)' }}>
+                <div className="stage1-checkpoint__head">
+                  <AlertTriangle size={15} style={{ color: 'var(--text-warning)', flexShrink: 0 }} />
+                  <span>Verification found issues — review before trusting the report</span>
+                </div>
+                <p className="stage1-checkpoint__body">{verificationReport.summary}</p>
+                {verificationReport.issues.filter(i => i.severity === 'critical').length > 0 && (
+                  <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {verificationReport.issues.filter(i => i.severity === 'critical').map((issue, idx) => (
+                      <div key={idx} style={{ fontSize: '12px', padding: '6px 8px', borderRadius: '4px', background: 'var(--bg-warning-subtle, rgba(255,170,0,0.08))' }}>
+                        <span
+                          style={{
+                            display: 'inline-block', fontSize: '10px', fontWeight: 700, letterSpacing: '0.04em',
+                            textTransform: 'uppercase', padding: '1px 6px', borderRadius: '3px', marginBottom: '4px',
+                            color: issue.severity === 'critical' ? '#fff' : 'var(--text-warning)',
+                            background: issue.severity === 'critical' ? 'var(--text-error, #d33)' : 'transparent',
+                            border: issue.severity === 'critical' ? 'none' : '1px solid var(--text-warning)',
+                          }}
+                        >
+                          {issue.severity}
+                        </span>
+                        <div style={{ color: 'var(--text-warning)', fontWeight: 600 }}>Claimed: {issue.claim}</div>
+                        <div style={{ color: 'var(--text-secondary)', marginTop: '2px' }}>Actual: {issue.actualSourceFinding}</div>
+                        <div style={{ color: 'var(--text-secondary)', opacity: 0.7, marginTop: '2px', wordBreak: 'break-all' }}>{issue.file}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Target Config — Stage-2 only; shown once code migration is the next
                 step, not before/during Stage-1 analysis. See codeMigrationRelevant. */}
             {detectedStack && codeMigrationRelevant && (
               <TargetConfig
                 detectedStack={detectedStack}
-                targetFramework={targetFramework}
+                targetFrontendFramework={targetFrontendFramework}
+                targetBackendFramework={targetBackendFramework}
                 targetDb={targetDb}
                 targetLang={targetLang}
                 testFramework={testFramework}
@@ -390,7 +446,8 @@ export default function AIPanel({
                 locked={targetConfigLocked}
                 onRequestEdit={handleRequestEditTargetConfig}
                 onCancelEdit={handleCancelEditTargetConfig}
-                onFrameworkChange={v => { setTargetFramework(v); save('setting_target_framework', v); }}
+                onFrontendFrameworkChange={v => { setTargetFrontendFramework(v); save('setting_target_frontend_framework', v); }}
+                onBackendFrameworkChange={v  => { setTargetBackendFramework(v);  save('setting_target_backend_framework', v);  }}
                 onDbChange={v        => { setTargetDb(v);        save('setting_target_database', v);  }}
                 onLangChange={v      => { setTargetLang(v);      save('setting_target_lang', v);       }}
                 onTestChange={v      => { setTestFramework(v);   save('setting_testing_framework', v); }}

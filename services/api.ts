@@ -203,6 +203,22 @@ export interface SessionStateResponse {
   validFileCount?: number;
   emptyFileCount?: number;
   emptyFiles?: { path: string; reason: string }[];
+  /** Cross-check of analysisReport/knowledgeGraph claims against the actual
+   * source files, written alongside them by a separate Verification Agent —
+   * null until that agent runs. */
+  verificationReport?: VerificationReport | null;
+}
+
+export interface VerificationReport {
+  issues: {
+    claim: string;
+    actualSourceFinding: string;
+    file: string;
+    severity: 'critical' | 'minor';
+  }[];
+  accurateClaims: string;
+  verdict: 'pass' | 'needs-review';
+  summary: string;
 }
 
 // Writes generated output (e.g. the Stage-1 Analysis report) to a folder on

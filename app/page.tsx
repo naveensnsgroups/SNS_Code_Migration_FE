@@ -78,7 +78,7 @@ export default function HomePage() {
     isPlanning, isGenerating, isVerifying,
     graphResolutionSummary, isCheckpointBusy,
     lastEventAt, runStartedAt, phaseDurations, reconnect,
-    validFileCount, emptyFileCount, emptyFiles,
+    validFileCount, emptyFileCount, emptyFiles, verificationReport,
     handleUpload,
     isTriggeringScannerAgent, handleTriggerScannerAgent,
     handleCloneFromGithub, handleStart, handleContinueAnalysis, handleSkipToStage2,
@@ -426,6 +426,7 @@ export default function HomePage() {
               validFileCount={validFileCount}
               emptyFileCount={emptyFileCount}
               emptyFiles={emptyFiles}
+              verificationReport={verificationReport}
               status={status}
               phases={phases}
               progress={progress}

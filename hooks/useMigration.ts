@@ -26,7 +26,7 @@ import {
   knowledgeGraphVirtualPath,
 } from '@/types';
 import type { ToolCallHistoryItem } from '@/components/live-status/types';
-import type { ReportedIssue, SessionStateResponse } from '@/services/api';
+import type { ReportedIssue, SessionStateResponse, VerificationReport } from '@/services/api';
 import {
   scanProject,
   triggerScannerAgent,
@@ -155,6 +155,10 @@ export interface UseMigrationReturn {
   validFileCount: number | undefined;
   emptyFileCount: number | undefined;
   emptyFiles: { path: string; reason: string }[];
+  /** Cross-check of the report/knowledge-graph against actual source files —
+   * null until the Verification Agent runs (gated on analysisReport, same as
+   * validFileCount above). */
+  verificationReport: VerificationReport | null;
   isRunning: boolean;
   hasProject: boolean;
   activeTool: { name: string; args: string } | null;  // ← poll-driven, no log parsing
@@ -229,6 +233,7 @@ export function useMigration(
   const [validFileCount, setValidFileCount] = useState<number | undefined>(undefined);
   const [emptyFileCount, setEmptyFileCount] = useState<number | undefined>(undefined);
   const [emptyFiles, setEmptyFiles] = useState<{ path: string; reason: string }[]>([]);
+  const [verificationReport, setVerificationReport] = useState<VerificationReport | null>(null);
   const [activeTool, setActiveTool]       = useState<{ name: string; args: string } | null>(null);
   // HITL graph-review checkpoint — the resolved-graph summary + an in-flight flag
   // for the continue/skip actions.
@@ -424,10 +429,12 @@ export function useMigration(
       setValidFileCount(state.validFileCount);
       setEmptyFileCount(state.emptyFileCount);
       setEmptyFiles(state.emptyFiles ?? []);
+      setVerificationReport(state.verificationReport ?? null);
     } else {
       setValidFileCount(undefined);
       setEmptyFileCount(undefined);
       setEmptyFiles([]);
+      setVerificationReport(null);
     }
 
     mergeBackendLogs(state.logs);
@@ -974,6 +981,7 @@ export function useMigration(
     setValidFileCount(undefined);
     setEmptyFileCount(undefined);
     setEmptyFiles([]);
+    setVerificationReport(null);
     setGraphResolutionSummary(null);
     setIsCheckpointBusy(false);
     setToolCallHistory([]);
@@ -997,7 +1005,7 @@ export function useMigration(
     status, sessionId, fileTree, detectedStack, selectedFile,
     legacyCode, legacyBinaryContent, modernCode, logs, progress, currentFile, phases,
     modernFileTree, modernFolderBasename, tokenUsage, analysisReport, knowledgeGraph,
-    validFileCount, emptyFileCount, emptyFiles,
+    validFileCount, emptyFileCount, emptyFiles, verificationReport,
     isRunning, hasProject,
     activeTool,
     toolCallHistory,

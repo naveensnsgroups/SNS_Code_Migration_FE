@@ -57,7 +57,11 @@ export interface DetectedStack {
 export interface TargetStack {
   provider: AIProvider;
   model: string;
-  framework: string;
+  // Split from a single `framework` field — a migration now targets a
+  // frontend framework (e.g. React -> Next.js) and a backend framework
+  // (e.g. Express -> NestJS) independently; they're rarely the same choice.
+  frontendFramework: string;
+  backendFramework: string;
   database: string;
   language: string;
   testFramework: string;
@@ -101,6 +105,18 @@ export const KNOWLEDGE_GRAPH_CATEGORIES: { key: string; fileName: string }[] = [
   { key: 'security', fileName: 'security-graph.json' },
   { key: 'symbol', fileName: 'symbol-graph.json' },
   { key: 'config', fileName: 'config-graph.json' },
+  // Frontend-side categories — same pattern as the 12 backend ones above,
+  // added once the workflow started running frontend-focused agents too.
+  { key: 'component', fileName: 'component-graph.json' },
+  { key: 'routing', fileName: 'routing-graph.json' },
+  { key: 'state', fileName: 'state-graph.json' },
+  { key: 'frontendApi', fileName: 'frontend-api-graph.json' },
+  { key: 'frontendConfig', fileName: 'frontend-config-graph.json' },
+  { key: 'frontendAuth', fileName: 'frontend-auth-graph.json' },
+  { key: 'frontendValidation', fileName: 'frontend-validation-graph.json' },
+  { key: 'frontendImports', fileName: 'frontend-imports-graph.json' },
+  { key: 'frontendCallFlow', fileName: 'frontend-call-flow-graph.json' },
+  { key: 'asset', fileName: 'asset-graph.json' },
 ];
 
 export function knowledgeGraphVirtualPath(fileName: string): string {

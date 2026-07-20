@@ -14,7 +14,11 @@ import type { DetectedStack } from '@/types';
 
 interface Props {
   detectedStack:     DetectedStack;
-  targetFramework:   string;
+  // Split so a migration can target a different frontend framework (e.g.
+  // React -> Next.js) and backend framework (e.g. Express -> NestJS)
+  // independently — see the TargetStack type comment for why.
+  targetFrontendFramework: string;
+  targetBackendFramework:  string;
   targetDb:          string;
   targetLang:        string;
   testFramework:     string;
@@ -26,7 +30,8 @@ interface Props {
   locked:            boolean;
   onRequestEdit:     () => void;
   onCancelEdit:      () => void;
-  onFrameworkChange: (v: string) => void;
+  onFrontendFrameworkChange: (v: string) => void;
+  onBackendFrameworkChange:  (v: string) => void;
   onDbChange:        (v: string) => void;
   onLangChange:      (v: string) => void;
   onTestChange:      (v: string) => void;
@@ -66,10 +71,10 @@ function InputRow({ label, id, value, placeholder, disabled, hint, onChange }: I
 }
 
 export default function TargetConfig({
-  detectedStack, targetFramework, targetDb, targetLang, testFramework,
+  detectedStack, targetFrontendFramework, targetBackendFramework, targetDb, targetLang, testFramework,
   hasPlan, isBusy, locked,
   onRequestEdit, onCancelEdit,
-  onFrameworkChange, onDbChange, onLangChange, onTestChange,
+  onFrontendFrameworkChange, onBackendFrameworkChange, onDbChange, onLangChange, onTestChange,
 }: Props) {
   // Only meaningful once a plan exists to protect — before that, fields are
   // always plainly editable and no lock UI is shown at all.
@@ -121,7 +126,7 @@ export default function TargetConfig({
           through to the form below regardless of lock state. */}
       {hasPlan && locked && (
         <div className="target-config__summary">
-          {[targetFramework, targetDb, targetLang, testFramework].filter(Boolean).join(' · ') || 'No values set'}
+          {[targetFrontendFramework, targetBackendFramework, targetDb, targetLang, testFramework].filter(Boolean).join(' · ') || 'No values set'}
         </div>
       )}
 
@@ -134,17 +139,27 @@ export default function TargetConfig({
           )}
 
           <InputRow
-            id="target-framework"
-            label="Target Framework"
-            value={targetFramework}
-            placeholder="e.g. NestJS, FastAPI, Quarkus…"
-            // Layer Analysis annotates the "API / Bridge Layer" row (detectedStack.apiLayer)
-            // with this same targetFramework value — the hint here must show the SAME
-            // detected field, or the two disagree (e.g. "Detected: None" here next to
-            // "CGI (Common Gateway Interface)" there, for the identical concept).
-            hint={detectedStack.apiLayer}
+            id="target-frontend-framework"
+            label="Target Frontend Framework"
+            value={targetFrontendFramework}
+            placeholder="e.g. Next.js, Vue, Angular…"
+            // Layer Analysis's "Frontend (Client)" row shows this same value —
+            // the hint here must match that detected field, or the two disagree.
+            hint={detectedStack.frontend}
             disabled={locked}
-            onChange={onFrameworkChange}
+            onChange={onFrontendFrameworkChange}
+          />
+
+          <InputRow
+            id="target-backend-framework"
+            label="Target Backend Framework"
+            value={targetBackendFramework}
+            placeholder="e.g. NestJS, FastAPI, Quarkus…"
+            // Layer Analysis's "Backend (Server)" and "API / Bridge Layer" rows
+            // both show this same value — see StackBadge for why they share it.
+            hint={detectedStack.backend}
+            disabled={locked}
+            onChange={onBackendFrameworkChange}
           />
 
           <InputRow

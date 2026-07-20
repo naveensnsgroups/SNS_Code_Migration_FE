@@ -46,13 +46,14 @@ interface Props {
   emptyFileCount?: number;
   emptyFiles?: Array<{ path: string; reason: string }>;
   /** Current Target Configuration values, once set — used to annotate Layer Analysis. */
-  targetFramework?: string;
+  targetFrontendFramework?: string;
+  targetBackendFramework?: string;
   targetDb?: string;
   targetLang?: string;
   targetTestFramework?: string;
 }
 
-export default function StackBadge({ detectedStack, validFileCount, emptyFileCount, emptyFiles, targetFramework, targetDb, targetLang, targetTestFramework }: Props) {
+export default function StackBadge({ detectedStack, validFileCount, emptyFileCount, emptyFiles, targetFrontendFramework, targetBackendFramework, targetDb, targetLang, targetTestFramework }: Props) {
   if (!detectedStack) return null;
   const displayFileCount = validFileCount ?? detectedStack.fileCount;
 
@@ -92,8 +93,8 @@ export default function StackBadge({ detectedStack, validFileCount, emptyFileCou
             <span>Layer Analysis</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <LayerRow label="Frontend (Client)"      value={detectedStack.frontend} />
-            <LayerRow label="API / Bridge Layer"     value={detectedStack.apiLayer} targetValue={targetFramework} />
+            <LayerRow label="Frontend (Client)"      value={detectedStack.frontend} targetValue={targetFrontendFramework} />
+            <LayerRow label="API / Bridge Layer"     value={detectedStack.apiLayer} targetValue={targetBackendFramework} />
             <LayerRow label="Backend (Server)"       value={detectedStack.backend} targetValue={targetLang} />
             <LayerRow label="Database (Storage)"     value={detectedStack.database} targetValue={targetDb} />
             <LayerRow label="ORM / Data Layer"       value={detectedStack.databaseLayer} />
