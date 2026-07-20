@@ -195,6 +195,11 @@ export interface SessionStateResponse {
   /** Entities/relationships extracted alongside analysisReport — shape is
    * whatever the agent produces (nodes/edges), not a fixed contract. */
   knowledgeGraph?: unknown;
+  /** Validation counts, written alongside analysisReport by the same Stage-1
+   * Update Document call — undefined/0 before that point, not yet meaningful. */
+  validFileCount?: number;
+  emptyFileCount?: number;
+  emptyFiles?: { path: string; reason: string }[];
 }
 
 // Writes generated output (e.g. the Stage-1 Analysis report) to a folder on

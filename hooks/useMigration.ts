@@ -147,6 +147,11 @@ export interface UseMigrationReturn {
   /** Structured entities/relationships from Stage-1 Analysis — null until the
    * agent completes. Also readable as a virtual Stage1_KnowledgeGraph.json file. */
   knowledgeGraph: unknown;
+  /** Validation counts, written alongside analysisReport — undefined/[] until
+   * Stage-1 analysis actually completes, never a premature "0". */
+  validFileCount: number | undefined;
+  emptyFileCount: number | undefined;
+  emptyFiles: { path: string; reason: string }[];
   isRunning: boolean;
   hasProject: boolean;
   activeTool: { name: string; args: string } | null;  // ← poll-driven, no log parsing
@@ -214,6 +219,12 @@ export function useMigration(
   const [tokenUsage, setTokenUsage]       = useState<TokenUsage | null>(null);
   const [analysisReport, setAnalysisReport] = useState<string | null>(null);
   const [knowledgeGraph, setKnowledgeGraph] = useState<unknown>(null);
+  // Written alongside analysisReport by the same Stage-1 Update Document call —
+  // stay undefined/[] until that point instead of showing a premature "0" during
+  // the scan-only stage (see the analysisReport gate in applyPollResult below).
+  const [validFileCount, setValidFileCount] = useState<number | undefined>(undefined);
+  const [emptyFileCount, setEmptyFileCount] = useState<number | undefined>(undefined);
+  const [emptyFiles, setEmptyFiles] = useState<{ path: string; reason: string }[]>([]);
   const [activeTool, setActiveTool]       = useState<{ name: string; args: string } | null>(null);
   // HITL graph-review checkpoint — the resolved-graph summary + an in-flight flag
   // for the continue/skip actions.
@@ -400,6 +411,20 @@ export function useMigration(
     setGraphResolutionSummary(state.graphResolutionSummary ?? null);
     setAnalysisReport(state.analysisReport ?? null);
     setKnowledgeGraph(state.knowledgeGraph ?? null);
+    // Gated on analysisReport, not just presence in the response — the backend
+    // always returns validFileCount/emptyFileCount (default 0) even before
+    // Stage-1 analysis has run, and showing "0 valid files" during the
+    // scan-only stage would misrepresent files that simply haven't been
+    // validated yet as files that failed validation.
+    if (state.analysisReport) {
+      setValidFileCount(state.validFileCount);
+      setEmptyFileCount(state.emptyFileCount);
+      setEmptyFiles(state.emptyFiles ?? []);
+    } else {
+      setValidFileCount(undefined);
+      setEmptyFileCount(undefined);
+      setEmptyFiles([]);
+    }
 
     mergeBackendLogs(state.logs);
     // Only overwrite if the backend actually reports these — an omitted field
@@ -610,12 +635,29 @@ export function useMigration(
     const formData = new FormData();
     const pathsArray: string[] = [];
 
+    // Never upload build artifacts, dependency folders, or VCS internals —
+    // they're never legacy source we'd want to migrate anyway, and nobody
+    // wants to see them in Explorer either. Everything else uploads as-is —
+    // full fidelity with what the project folder actually looks like
+    // (matching what an editor like VS Code would show). Binary/media files
+    // (images, PDFs, etc.) are NOT filtered here on purpose: they still get
+    // uploaded and appear in the file tree — the backend's content sniffing
+    // in scan.js handles them safely at scan time (skips storing binary
+    // content, keeps the tree entry) instead of hiding them at upload time.
+    const EXCLUDE_PATH_PARTS = ['node_modules/', 'dist/', 'build/', '.git/', 'vendor/',
+      'target/', 'bin/', 'obj/', '__pycache__/', '.next/', 'coverage/', 'out/', 'venv/',
+      '.venv/', '.idea/', '.vscode/'];
+
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const relativePath =
         explicitPaths && explicitPaths[i]
           ? explicitPaths[i]
           : ((file as File & { webkitRelativePath: string }).webkitRelativePath || file.name);
+
+      const lowerPath = relativePath.toLowerCase();
+      if (EXCLUDE_PATH_PARTS.some(p => lowerPath.includes(p))) continue;
+
       formData.append('files', file);
       pathsArray.push(relativePath);
     }
@@ -919,6 +961,9 @@ export function useMigration(
     setTokenUsage(null);
     setAnalysisReport(null);
     setKnowledgeGraph(null);
+    setValidFileCount(undefined);
+    setEmptyFileCount(undefined);
+    setEmptyFiles([]);
     setGraphResolutionSummary(null);
     setIsCheckpointBusy(false);
     setToolCallHistory([]);
@@ -942,6 +987,7 @@ export function useMigration(
     status, sessionId, fileTree, detectedStack, selectedFile,
     legacyCode, modernCode, logs, progress, currentFile, phases,
     modernFileTree, modernFolderBasename, tokenUsage, analysisReport, knowledgeGraph,
+    validFileCount, emptyFileCount, emptyFiles,
     isRunning, hasProject,
     activeTool,
     toolCallHistory,

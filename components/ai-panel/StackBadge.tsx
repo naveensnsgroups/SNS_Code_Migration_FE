@@ -42,6 +42,9 @@ function LayerRow({ label, value, targetValue }: LayerRowProps) {
 
 interface Props {
   detectedStack: DetectedStack | null;
+  validFileCount?: number;
+  emptyFileCount?: number;
+  emptyFiles?: Array<{ path: string; reason: string }>;
   /** Current Target Configuration values, once set — used to annotate Layer Analysis. */
   targetFramework?: string;
   targetDb?: string;
@@ -49,8 +52,9 @@ interface Props {
   targetTestFramework?: string;
 }
 
-export default function StackBadge({ detectedStack, targetFramework, targetDb, targetLang, targetTestFramework }: Props) {
+export default function StackBadge({ detectedStack, validFileCount, emptyFileCount, emptyFiles, targetFramework, targetDb, targetLang, targetTestFramework }: Props) {
   if (!detectedStack) return null;
+  const displayFileCount = validFileCount ?? detectedStack.fileCount;
 
   return (
     <div className="ai-section">
@@ -76,7 +80,8 @@ export default function StackBadge({ detectedStack, targetFramework, targetDb, t
           </div>
           <div className="badge-pill">
             <span className="badge-pill__label">Files Count</span>
-            <span className="badge-pill__value files-color">{detectedStack.fileCount}</span>
+            <span className="badge-pill__value files-color">{displayFileCount}</span>
+            {emptyFileCount ? <span style={{ fontSize: '10px', color: 'var(--text-warning)', marginTop: '2px' }}>({emptyFileCount} empty excluded)</span> : null}
           </div>
         </div>
 
@@ -96,6 +101,41 @@ export default function StackBadge({ detectedStack, targetFramework, targetDb, t
             <LayerRow label="Testing Framework"      value={undefined} targetValue={targetTestFramework} />
           </div>
         </div>
+
+        {/* Validation Report */}
+        {(validFileCount !== undefined || emptyFileCount) && (
+          <div className="validation-report" style={{ marginTop: '14px', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px' }}>
+            <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: 'bold', letterSpacing: '0.5px' }}>
+              Validation Report
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Valid Source Files</span>
+                <span style={{ fontWeight: 600, color: 'var(--text-success)' }}>{validFileCount ?? detectedStack.fileCount}</span>
+              </div>
+              {emptyFileCount ? (
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Empty Files Excluded</span>
+                  <span style={{ fontWeight: 600, color: 'var(--text-warning)' }}>{emptyFileCount}</span>
+                </div>
+              ) : null}
+              {emptyFiles && emptyFiles.length > 0 && (
+                <details style={{ marginTop: '4px', cursor: 'pointer' }}>
+                  <summary style={{ color: 'var(--text-info)', fontSize: '11px', fontWeight: 500 }}>
+                    View excluded files ({emptyFiles.length})
+                  </summary>
+                  <div style={{ marginTop: '6px', paddingLeft: '12px', borderLeft: '2px solid var(--border-subtle)' }}>
+                    {emptyFiles.map((f, idx) => (
+                      <div key={idx} style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '4px', wordBreak: 'break-all' }}>
+                        <span style={{ color: 'var(--text-warning)', fontWeight: 500 }}>{f.reason}:</span> {f.path}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

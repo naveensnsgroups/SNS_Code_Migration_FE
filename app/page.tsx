@@ -78,6 +78,7 @@ export default function HomePage() {
     isPlanning, isGenerating, isVerifying,
     graphResolutionSummary, isCheckpointBusy,
     lastEventAt, runStartedAt, phaseDurations, reconnect,
+    validFileCount, emptyFileCount, emptyFiles,
     handleUpload,
     isTriggeringScannerAgent, handleTriggerScannerAgent,
     handleCloneFromGithub, handleStart, handleContinueAnalysis, handleSkipToStage2,
@@ -421,6 +422,9 @@ export default function HomePage() {
             <div className="sash-vertical" onMouseDown={startResizeAiPanel} />
             <AIPanel
               detectedStack={detectedStack}
+              validFileCount={validFileCount}
+              emptyFileCount={emptyFileCount}
+              emptyFiles={emptyFiles}
               status={status}
               phases={phases}
               progress={progress}

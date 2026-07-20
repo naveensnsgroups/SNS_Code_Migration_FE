@@ -24,6 +24,9 @@ import LiveStatusOverlay  from '@/components/live-status/LiveStatusOverlay';
 
 interface Props {
   detectedStack:    DetectedStack | null;
+  validFileCount?:  number;
+  emptyFileCount?:  number;
+  emptyFiles?:      Array<{ path: string; reason: string }>;
   status:           MigrationStatus;
   phases:           MigrationPhase[];
   progress:         number;
@@ -85,7 +88,7 @@ function setLocal(key: string, value: string) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function AIPanel({
-  detectedStack, status, phases, progress, currentFile,
+  detectedStack, validFileCount, emptyFileCount, emptyFiles, status, phases, progress, currentFile,
   logs, hasProject, activeTool, toolCallHistory,
   onStart, onStop, onPause,
   isTriggeringScannerAgent, onTriggerScannerAgent,
@@ -344,7 +347,16 @@ export default function AIPanel({
         ) : (
           <>
             {/* Detected Stack */}
-            <StackBadge detectedStack={detectedStack} targetFramework={targetFramework} targetDb={targetDb} targetLang={targetLang} targetTestFramework={testFramework} />
+            <StackBadge
+              detectedStack={detectedStack}
+              validFileCount={validFileCount}
+              emptyFileCount={emptyFileCount}
+              emptyFiles={emptyFiles}
+              targetFramework={targetFramework}
+              targetDb={targetDb}
+              targetLang={targetLang}
+              targetTestFramework={testFramework}
+            />
 
             {/* HITL checkpoint banner: makes it explicit that the run isn't "done"
                 — it's the user's turn to review and start the next stage. Consistent
