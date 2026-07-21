@@ -3,10 +3,10 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Activity, CheckCircle2, ArrowDown, AlertTriangle } from 'lucide-react';
+import { Activity, CheckCircle2, ArrowDown } from 'lucide-react';
 import type { DetectedStack, MigrationStatus, MigrationPhase, TargetStack, AIProvider, MigrationTaskEntry, RuleCoverageEntry, GraphResolutionSummary } from '@/types';
 import type { LogEntry } from '@/types';
-import type { ReportedIssue, VerificationReport } from '@/services/api';
+import type { ReportedIssue } from '@/services/api';
 
 import { readSettings } from '@/hooks/useSettings';
 import { useLiveStatus } from '@/hooks/useLiveStatus';
@@ -27,9 +27,6 @@ interface Props {
   validFileCount?:  number;
   emptyFileCount?:  number;
   emptyFiles?:      Array<{ path: string; reason: string }>;
-  /** Cross-check of the analysis report against actual source files — null
-   * until the Verification Agent runs. */
-  verificationReport?: VerificationReport | null;
   status:           MigrationStatus;
   phases:           MigrationPhase[];
   progress:         number;
@@ -91,7 +88,7 @@ function setLocal(key: string, value: string) {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function AIPanel({
-  detectedStack, validFileCount, emptyFileCount, emptyFiles, verificationReport, status, phases, progress, currentFile,
+  detectedStack, validFileCount, emptyFileCount, emptyFiles, status, phases, progress, currentFile,
   logs, hasProject, activeTool, toolCallHistory,
   onStart, onStop, onPause,
   isTriggeringScannerAgent, onTriggerScannerAgent,
@@ -389,45 +386,6 @@ export default function AIPanel({
                 <div className="stage1-checkpoint__next">
                   <ArrowDown size={11} /> Your turn — review, then continue below
                 </div>
-              </div>
-            )}
-
-            {/* Verification Agent warning: the analysis report/knowledge graph
-                completed, but its claims didn't all check out against the actual
-                source files. Distinct from the checkpoint banner above — that one
-                says "your turn to continue", this one says "double-check before
-                you trust what you're continuing with". Only critical-severity
-                issues are listed here; minor ones are still in verificationReport
-                for anyone who opens the raw file in Explorer. */}
-            {verificationReport && verificationReport.verdict === 'needs-review' && (
-              <div className="stage1-checkpoint" style={{ borderColor: 'var(--text-warning)' }}>
-                <div className="stage1-checkpoint__head">
-                  <AlertTriangle size={15} style={{ color: 'var(--text-warning)', flexShrink: 0 }} />
-                  <span>Verification found issues — review before trusting the report</span>
-                </div>
-                <p className="stage1-checkpoint__body">{verificationReport.summary}</p>
-                {verificationReport.issues.filter(i => i.severity === 'critical').length > 0 && (
-                  <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {verificationReport.issues.filter(i => i.severity === 'critical').map((issue, idx) => (
-                      <div key={idx} style={{ fontSize: '12px', padding: '6px 8px', borderRadius: '4px', background: 'var(--bg-warning-subtle, rgba(255,170,0,0.08))' }}>
-                        <span
-                          style={{
-                            display: 'inline-block', fontSize: '10px', fontWeight: 700, letterSpacing: '0.04em',
-                            textTransform: 'uppercase', padding: '1px 6px', borderRadius: '3px', marginBottom: '4px',
-                            color: issue.severity === 'critical' ? '#fff' : 'var(--text-warning)',
-                            background: issue.severity === 'critical' ? 'var(--text-error, #d33)' : 'transparent',
-                            border: issue.severity === 'critical' ? 'none' : '1px solid var(--text-warning)',
-                          }}
-                        >
-                          {issue.severity}
-                        </span>
-                        <div style={{ color: 'var(--text-warning)', fontWeight: 600 }}>Claimed: {issue.claim}</div>
-                        <div style={{ color: 'var(--text-secondary)', marginTop: '2px' }}>Actual: {issue.actualSourceFinding}</div>
-                        <div style={{ color: 'var(--text-secondary)', opacity: 0.7, marginTop: '2px', wordBreak: 'break-all' }}>{issue.file}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
 
