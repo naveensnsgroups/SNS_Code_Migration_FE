@@ -21,7 +21,6 @@ interface Props {
   targetBackendFramework:  string;
   targetDb:          string;
   targetLang:        string;
-  testFramework:     string;
   /** A migration plan already exists — switches the section into locked/edit-explicitly mode. */
   hasPlan:           boolean;
   /** A Stage-2 sub-stage is actively running — fields are never editable regardless of hasPlan/locked. */
@@ -34,7 +33,6 @@ interface Props {
   onBackendFrameworkChange:  (v: string) => void;
   onDbChange:        (v: string) => void;
   onLangChange:      (v: string) => void;
-  onTestChange:      (v: string) => void;
 }
 
 interface InputRowProps {
@@ -71,10 +69,10 @@ function InputRow({ label, id, value, placeholder, disabled, hint, onChange }: I
 }
 
 export default function TargetConfig({
-  detectedStack, targetFrontendFramework, targetBackendFramework, targetDb, targetLang, testFramework,
+  detectedStack, targetFrontendFramework, targetBackendFramework, targetDb, targetLang,
   hasPlan, isBusy, locked,
   onRequestEdit, onCancelEdit,
-  onFrontendFrameworkChange, onBackendFrameworkChange, onDbChange, onLangChange, onTestChange,
+  onFrontendFrameworkChange, onBackendFrameworkChange, onDbChange, onLangChange,
 }: Props) {
   // Only meaningful once a plan exists to protect — before that, fields are
   // always plainly editable and no lock UI is shown at all.
@@ -126,7 +124,7 @@ export default function TargetConfig({
           through to the form below regardless of lock state. */}
       {hasPlan && locked && (
         <div className="target-config__summary">
-          {[targetFrontendFramework, targetBackendFramework, targetDb, targetLang, testFramework].filter(Boolean).join(' · ') || 'No values set'}
+          {[targetFrontendFramework, targetBackendFramework, targetDb, targetLang].filter(Boolean).join(' · ') || 'No values set'}
         </div>
       )}
 
@@ -180,15 +178,6 @@ export default function TargetConfig({
             hint={detectedStack.language}
             disabled={locked}
             onChange={onLangChange}
-          />
-
-          <InputRow
-            id="target-test-framework"
-            label="Testing Framework"
-            value={testFramework}
-            placeholder="e.g. vitest, jest, pytest, junit…"
-            disabled={locked}
-            onChange={onTestChange}
           />
         </>
       )}

@@ -24,6 +24,8 @@ import {
   KNOWLEDGE_GRAPH_FOLDER,
   KNOWLEDGE_GRAPH_CATEGORIES,
   knowledgeGraphVirtualPath,
+  MIGRATION_PLAN_VIRTUAL_PATH,
+  renderMigrationPlanMarkdown,
 } from '@/types';
 import type { ToolCallHistoryItem } from '@/components/live-status/types';
 import type { ReportedIssue, SessionStateResponse, VerificationReport } from '@/services/api';
@@ -911,6 +913,12 @@ export function useMigration(
       setModernCode(null);
       return;
     }
+    if (path === MIGRATION_PLAN_VIRTUAL_PATH) {
+      setLegacyCode(renderMigrationPlanMarkdown(codeMigration.migrationTaskList ?? []));
+      setLegacyBinaryContent(null);
+      setModernCode(null);
+      return;
+    }
     const kgMatch = KNOWLEDGE_GRAPH_CATEGORIES.find(({ fileName }) => path === knowledgeGraphVirtualPath(fileName));
     if (kgMatch) {
       const categoryData = knowledgeGraph && typeof knowledgeGraph === 'object'
@@ -933,7 +941,7 @@ export function useMigration(
       setLegacyBinaryContent(null);
       setModernCode(null);
     }
-  }, [sessionId, backendUrl, analysisReport, knowledgeGraph]);
+  }, [sessionId, backendUrl, analysisReport, knowledgeGraph, codeMigration.migrationTaskList]);
 
   // ── Clear selected file (close editor) ─────────────────────────────────────
   const clearSelectedFile = useCallback(() => {

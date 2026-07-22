@@ -50,10 +50,9 @@ interface Props {
   targetBackendFramework?: string;
   targetDb?: string;
   targetLang?: string;
-  targetTestFramework?: string;
 }
 
-export default function StackBadge({ detectedStack, validFileCount, emptyFileCount, emptyFiles, targetFrontendFramework, targetBackendFramework, targetDb, targetLang, targetTestFramework }: Props) {
+export default function StackBadge({ detectedStack, validFileCount, emptyFileCount, emptyFiles, targetFrontendFramework, targetBackendFramework, targetDb, targetLang }: Props) {
   if (!detectedStack) return null;
   const displayFileCount = validFileCount ?? detectedStack.fileCount;
 
@@ -99,7 +98,6 @@ export default function StackBadge({ detectedStack, validFileCount, emptyFileCou
             <LayerRow label="Database (Storage)"     value={detectedStack.database} targetValue={targetDb} />
             <LayerRow label="ORM / Data Layer"       value={detectedStack.databaseLayer} />
             <LayerRow label="Cloud / Infrastructure" value={detectedStack.cloudInfrastructure} />
-            <LayerRow label="Testing Framework"      value={undefined} targetValue={targetTestFramework} />
           </div>
         </div>
 

@@ -17,7 +17,7 @@ import { usePanelResize } from '@/hooks/useResize';
 import { useBackendUrl }  from '@/hooks/useSettings';
 import { useNotifications } from '@/context/NotificationContext';
 import type { MigrationStatus, FileNode } from '@/types';
-import { STAGE1_ANALYSIS_VIRTUAL_PATH, KNOWLEDGE_GRAPH_FOLDER, KNOWLEDGE_GRAPH_CATEGORIES, knowledgeGraphVirtualPath } from '@/types';
+import { STAGE1_ANALYSIS_VIRTUAL_PATH, KNOWLEDGE_GRAPH_FOLDER, KNOWLEDGE_GRAPH_CATEGORIES, knowledgeGraphVirtualPath, MIGRATION_PLAN_VIRTUAL_PATH } from '@/types';
 
 // ── Status Label Map ───────────────────────────────────────────────────────────
 
@@ -152,7 +152,7 @@ export default function HomePage() {
   }, []);
 
   // ── Target Configuration reset ─────────────────────────────────────────────
-  // Target Framework/Database/Language/Testing values persist in localStorage
+  // Target Framework/Database/Language values persist in localStorage
   // globally, not per-project — so every entry point that starts a genuinely
   // NEW project (not just the explicit "New Project" button) must clear them,
   // or Layer Analysis silently shows a previous, unrelated project's target
@@ -161,7 +161,6 @@ export default function HomePage() {
     localStorage.removeItem('setting_target_framework');
     localStorage.removeItem('setting_target_database');
     localStorage.removeItem('setting_target_lang');
-    localStorage.removeItem('setting_testing_framework');
     setSettingsTrigger(prev => prev + 1);
   }, []);
 
@@ -214,6 +213,15 @@ export default function HomePage() {
       ? [{
           name: 'Stage1_Analysis.md',
           path: STAGE1_ANALYSIS_VIRTUAL_PATH,
+          type: 'file' as const,
+          migrated: false,
+          language: 'md',
+        } satisfies FileNode]
+      : []),
+    ...(migrationTaskList && migrationTaskList.length > 0
+      ? [{
+          name: 'Migration_Plan.md',
+          path: MIGRATION_PLAN_VIRTUAL_PATH,
           type: 'file' as const,
           migrated: false,
           language: 'md',

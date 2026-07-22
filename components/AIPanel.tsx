@@ -112,7 +112,6 @@ export default function AIPanel({
   const [targetBackendFramework,  setTargetBackendFramework]  = useState('');
   const [targetDb,        setTargetDb]        = useState('');
   const [targetLang,      setTargetLang]      = useState('');
-  const [testFramework,   setTestFramework]   = useState('');
 
   // ── Derived flags ──────────────────────────────────────────────────────────
   const isRunning     = ['scanning', 'planning'].includes(status);
@@ -134,7 +133,7 @@ export default function AIPanel({
   const [targetConfigUnlocked, setTargetConfigUnlocked] = useState(false);
   // Snapshot taken at the moment of unlocking, restored verbatim on Cancel — the
   // same "edit / save / cancel" pattern as any settings form.
-  const targetConfigSnapshotRef = useRef<{ frontendFramework: string; backendFramework: string; db: string; lang: string; test: string } | null>(null);
+  const targetConfigSnapshotRef = useRef<{ frontendFramework: string; backendFramework: string; db: string; lang: string } | null>(null);
 
   const targetConfigHasPlan = !!migrationTaskList && migrationTaskList.length > 0;
   const targetConfigBusy    = !!isPlanning || !!isGenerating || !!isVerifying;
@@ -193,7 +192,6 @@ export default function AIPanel({
     setTargetFrontendFramework(getLocal('setting_target_frontend_framework'));
     setTargetBackendFramework(getLocal('setting_target_backend_framework'));
     setTargetDb(getLocal('setting_target_database'));
-    setTestFramework(getLocal('setting_testing_framework'));
     setTargetLang(getLocal('setting_target_lang'));
   }, [settingsTrigger]);
 
@@ -218,24 +216,20 @@ export default function AIPanel({
       backendFramework:  targetBackendFramework,
       database:      targetDb,
       language:      targetLang,
-      // Send exactly what the user typed — no hardcoded fallback, same
-      // discipline as `hasModel` above. An empty value means "not specified".
-      testFramework,
       outputMode:    'direct',
     });
-  }, [provider, model, targetFrontendFramework, targetBackendFramework, targetDb, targetLang, testFramework, onStart]);
+  }, [provider, model, targetFrontendFramework, targetBackendFramework, targetDb, targetLang, onStart]);
 
   // ── Stage 2 — Start Migration Planning ─────────────────────────────────────
   const allTargetFieldsFilled =
     targetFrontendFramework.trim().length > 0 &&
     targetBackendFramework.trim().length > 0 &&
     targetDb.trim().length > 0 &&
-    targetLang.trim().length > 0 &&
-    testFramework.trim().length > 0;
+    targetLang.trim().length > 0;
 
   const canStartMigration = allTargetFieldsFilled;
   const migrationDisabledReason = !allTargetFieldsFilled
-    ? 'Fill in all 5 Target Configuration fields first'
+    ? 'Fill in all 4 Target Configuration fields first'
     : '';
 
   const handleStartMigration = useCallback(() => {
@@ -246,24 +240,23 @@ export default function AIPanel({
       backendFramework:  targetBackendFramework,
       database:      targetDb,
       language:      targetLang,
-      testFramework,
       outputMode:    'direct',
     });
     // Submitting starts a fresh planning run against whatever values are
     // current right now — re-lock immediately so the section reflects "this is
     // what's being planned with", not an editable state mid-run.
     setTargetConfigUnlocked(false);
-  }, [provider, model, targetFrontendFramework, targetBackendFramework, targetDb, targetLang, testFramework, onStartMigration]);
+  }, [provider, model, targetFrontendFramework, targetBackendFramework, targetDb, targetLang, onStartMigration]);
 
   // ── Target Configuration edit / cancel (only relevant once a plan exists —
   // see targetConfigLocked above) ─────────────────────────────────────────────
   const handleRequestEditTargetConfig = useCallback(() => {
     targetConfigSnapshotRef.current = {
       frontendFramework: targetFrontendFramework, backendFramework: targetBackendFramework,
-      db: targetDb, lang: targetLang, test: testFramework,
+      db: targetDb, lang: targetLang,
     };
     setTargetConfigUnlocked(true);
-  }, [targetFrontendFramework, targetBackendFramework, targetDb, targetLang, testFramework]);
+  }, [targetFrontendFramework, targetBackendFramework, targetDb, targetLang]);
 
   const handleCancelEditTargetConfig = useCallback(() => {
     const snap = targetConfigSnapshotRef.current;
@@ -272,7 +265,6 @@ export default function AIPanel({
       setTargetBackendFramework(snap.backendFramework);   save('setting_target_backend_framework', snap.backendFramework);
       setTargetDb(snap.db);               save('setting_target_database', snap.db);
       setTargetLang(snap.lang);           save('setting_target_lang', snap.lang);
-      setTestFramework(snap.test);        save('setting_testing_framework', snap.test);
     }
     setTargetConfigUnlocked(false);
   }, [save]);
@@ -292,10 +284,9 @@ export default function AIPanel({
       backendFramework:  targetBackendFramework,
       database:      targetDb,
       language:      targetLang,
-      testFramework,
       outputMode:    'direct',
     });
-  }, [provider, model, targetFrontendFramework, targetBackendFramework, targetDb, targetLang, testFramework, onStartGeneration]);
+  }, [provider, model, targetFrontendFramework, targetBackendFramework, targetDb, targetLang, onStartGeneration]);
 
   // ── Stage 2 — Start Verification ───────────────────────────────────────────
   const verifiedCount = (migrationTaskList ?? []).filter(t => t.status === 'verified').length;
@@ -311,10 +302,9 @@ export default function AIPanel({
       backendFramework:  targetBackendFramework,
       database:      targetDb,
       language:      targetLang,
-      testFramework,
       outputMode:    'direct',
     });
-  }, [provider, model, targetFrontendFramework, targetBackendFramework, targetDb, targetLang, testFramework, onStartVerification]);
+  }, [provider, model, targetFrontendFramework, targetBackendFramework, targetDb, targetLang, onStartVerification]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -368,7 +358,6 @@ export default function AIPanel({
               targetBackendFramework={targetBackendFramework}
               targetDb={targetDb}
               targetLang={targetLang}
-              targetTestFramework={testFramework}
             />
 
             {/* HITL checkpoint banner: makes it explicit that the run isn't "done"
@@ -398,7 +387,6 @@ export default function AIPanel({
                 targetBackendFramework={targetBackendFramework}
                 targetDb={targetDb}
                 targetLang={targetLang}
-                testFramework={testFramework}
                 hasPlan={targetConfigHasPlan}
                 isBusy={targetConfigBusy}
                 locked={targetConfigLocked}
@@ -408,7 +396,6 @@ export default function AIPanel({
                 onBackendFrameworkChange={v  => { setTargetBackendFramework(v);  save('setting_target_backend_framework', v);  }}
                 onDbChange={v        => { setTargetDb(v);        save('setting_target_database', v);  }}
                 onLangChange={v      => { setTargetLang(v);      save('setting_target_lang', v);       }}
-                onTestChange={v      => { setTestFramework(v);   save('setting_testing_framework', v); }}
               />
             )}
 

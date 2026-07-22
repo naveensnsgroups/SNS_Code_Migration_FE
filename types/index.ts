@@ -64,7 +64,6 @@ export interface TargetStack {
   backendFramework: string;
   database: string;
   language: string;
-  testFramework: string;
   outputMode: 'direct' | 'suggest';
 }
 
@@ -181,4 +180,44 @@ export interface RuleCoverageEntry {
   rules:      string[];
   covered?:   string[];
   uncovered?: string[];
+}
+
+// Same virtual-file pattern as STAGE1_ANALYSIS_VIRTUAL_PATH — synthesized on
+// the frontend from migrationTaskList (already in state, no backend round
+// trip needed) so the migration plan is readable in the Explorer/CodeViewer
+// like any other file, once a plan exists.
+export const MIGRATION_PLAN_VIRTUAL_PATH = 'Migration_Plan.md';
+
+export function renderMigrationPlanMarkdown(tasks: MigrationTaskEntry[]): string {
+  if (!tasks || tasks.length === 0) return '# Migration Plan\n\nNo migration plan yet.';
+
+  const lines: string[] = [
+    '# Migration Plan',
+    '',
+    `**${tasks.length} task${tasks.length === 1 ? '' : 's'}** — legacy files mapped to their modernized targets.`,
+    '',
+  ];
+
+  tasks.forEach((task, i) => {
+    lines.push(`## ${i + 1}. ${task.legacyFile}`);
+    lines.push(`→ \`${task.targetFile}\``);
+    lines.push('');
+    lines.push(`- **Status:** ${task.status}`);
+    if (task.mergedLegacyFiles && task.mergedLegacyFiles.length > 0) {
+      lines.push(`- **Merged legacy files:** ${task.mergedLegacyFiles.join(', ')}`);
+    }
+    if (task.rulesInvolved && task.rulesInvolved.length > 0) {
+      lines.push(`- **Rules involved:**`);
+      task.rulesInvolved.forEach(rule => lines.push(`  - ${rule}`));
+    }
+    if (task.dependsOn && task.dependsOn.length > 0) {
+      lines.push(`- **Depends on:** ${task.dependsOn.map(d => `\`${d}\``).join(', ')}`);
+    }
+    if (task.lastError) {
+      lines.push(`- **Last error:** ${task.lastError}`);
+    }
+    lines.push('');
+  });
+
+  return lines.join('\n');
 }
