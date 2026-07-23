@@ -9,7 +9,7 @@ import type { ReportedIssue } from '@/services/api';
 import {
   triggerMigrationPlanning,
   triggerCodeGeneration,
-  startVerification,
+  triggerVerification,
   fetchSessionState,
   reportIssue,
 } from '@/services/api';
@@ -29,21 +29,6 @@ export interface UseCodeMigrationReturn {
   handleStartCodeGeneration:    (target: TargetStack) => Promise<void>;
   handleStartVerification:      (target: TargetStack) => Promise<void>;
   handleReportIssue: (stage: string, text: string) => Promise<void>;
-}
-
-// Each sub-stage wipes session.apiKey/apiKeys once it finishes, so it must be resent for the next.
-function resolveCombinedApiKey(allApiKeys: Record<string, string>): string {
-  return (
-    allApiKeys.anthropic   ||
-    allApiKeys.openai      ||
-    allApiKeys.google      ||
-    allApiKeys.grok        ||
-    allApiKeys.groq        ||
-    allApiKeys.openrouter  ||
-    allApiKeys.mistral     ||
-    allApiKeys.huggingface ||
-    ''
-  );
 }
 
 export function useCodeMigration(
@@ -150,21 +135,31 @@ export function useCodeMigration(
     }
   }, [sessionId, addLog, startPolling, setStatus]);
 
+  // Fires the Verification Agent webhook (same pattern as the other agents —
+  // reads migrationTaskList + the real legacy/generated file content back out
+  // of MongoDB itself). Optimistically set to 'verification' so polling keeps
+  // running until the agent's MongoDB write lands.
   const handleStartVerification = useCallback(async (target: TargetStack) => {
     if (!sessionId) return;
 
+    const settings = readSettings();
+    if (!settings.agentBuilderWebhookUrl.trim()) {
+      addLog('AgentBuilder Webhook Base URL is not configured — set it in Settings first.', 'error');
+      return;
+    }
+
+    setStatus('verification');
     addLog('Starting verification...', 'command');
 
-    const settings = readSettings();
-    const combinedApiKey = resolveCombinedApiKey(settings.allApiKeys);
-
     try {
-      await startVerification(backendUrl, sessionId, target, combinedApiKey, settings.allApiKeys);
+      await triggerVerification(settings.agentBuilderWebhookUrl, sessionId, target);
+      addLog('Verification Agent triggered.', 'success');
       startPolling(sessionId);
     } catch (err: unknown) {
       addLog(`Verification failed to start: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      setStatus('error');
     }
-  }, [sessionId, addLog, backendUrl, startPolling]);
+  }, [sessionId, addLog, startPolling, setStatus]);
 
   return {
     migrationTaskList, ruleCoverageReport, planSanityWarning, reportedIssues,

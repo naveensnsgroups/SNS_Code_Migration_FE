@@ -17,7 +17,7 @@ import { usePanelResize } from '@/hooks/useResize';
 import { useBackendUrl }  from '@/hooks/useSettings';
 import { useNotifications } from '@/context/NotificationContext';
 import type { MigrationStatus, FileNode } from '@/types';
-import { STAGE1_ANALYSIS_VIRTUAL_PATH, KNOWLEDGE_GRAPH_FOLDER, KNOWLEDGE_GRAPH_CATEGORIES, knowledgeGraphVirtualPath, MIGRATION_PLAN_VIRTUAL_PATH } from '@/types';
+import { STAGE1_ANALYSIS_VIRTUAL_PATH, KNOWLEDGE_GRAPH_FOLDER, KNOWLEDGE_GRAPH_CATEGORIES, knowledgeGraphVirtualPath, MIGRATION_PLAN_VIRTUAL_PATH, VERIFICATION_REPORT_VIRTUAL_PATH } from '@/types';
 
 // ── Status Label Map ───────────────────────────────────────────────────────────
 
@@ -222,6 +222,15 @@ export default function HomePage() {
       ? [{
           name: 'Migration_Plan.md',
           path: MIGRATION_PLAN_VIRTUAL_PATH,
+          type: 'file' as const,
+          migrated: false,
+          language: 'md',
+        } satisfies FileNode]
+      : []),
+    ...(migrationTaskList && migrationTaskList.some(t => t.status === 'verified' || t.status === 'failed')
+      ? [{
+          name: 'Verification_Report.md',
+          path: VERIFICATION_REPORT_VIRTUAL_PATH,
           type: 'file' as const,
           migrated: false,
           language: 'md',

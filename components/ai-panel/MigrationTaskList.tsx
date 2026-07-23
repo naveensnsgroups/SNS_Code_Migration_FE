@@ -3,7 +3,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ListTree, ShieldCheck, CheckCircle2, XCircle, Circle, AlertTriangle, MessageSquareWarning, Loader2 } from 'lucide-react';
+import { ListTree, ShieldCheck, CheckCircle2, XCircle, Circle, AlertTriangle, MessageSquareWarning, Loader2, Wrench } from 'lucide-react';
 import type { MigrationTaskEntry, RuleCoverageEntry } from '@/types';
 import type { ReportedIssue } from '@/services/api';
 import { useNotifications } from '@/context/NotificationContext';
@@ -123,6 +123,20 @@ export default function MigrationTaskList({
                   {taskDisplayName(task.legacyFile)}
                   {task.mergedLegacyFiles && task.mergedLegacyFiles.length > 0 && ` + ${task.mergedLegacyFiles.length} more`}
                 </div>
+                {task.wasAutoFixed && (
+                  <div
+                    title="The Verification Agent found a real problem in the generated code and rewrote this file — worth a second look, not just trusting the checkmark."
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0,
+                      fontSize: '9.5px', fontWeight: 700, color: 'var(--text-warning)',
+                      background: 'var(--bg-tertiary)', border: '1px solid var(--text-warning)',
+                      borderRadius: '10px', padding: '1px 6px', marginLeft: '4px',
+                    }}
+                  >
+                    <Wrench size={9} />
+                    <span>FIXED</span>
+                  </div>
+                )}
               </div>
               {task.mergedLegacyFiles && task.mergedLegacyFiles.length > 0 && (
                 <div style={{ color: 'var(--text-muted)', fontSize: '10px', marginLeft: '16px' }}>

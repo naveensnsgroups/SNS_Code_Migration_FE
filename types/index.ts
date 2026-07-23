@@ -172,6 +172,11 @@ export interface MigrationTaskEntry {
   mergedLegacyFiles?: string[];
   // Real exported symbols (name + async-ness), extracted from the generated content.
   exportedSymbols?: { name: string; isAsync: boolean }[];
+  // True when the Verification Agent found a real problem in the originally
+  // generated code and rewrote it — distinguishes "verified correct on the
+  // first pass" from "had to be auto-repaired," which is worth surfacing
+  // separately since a repaired file deserves a second look, not blind trust.
+  wasAutoFixed?: boolean;
 }
 
 export interface RuleCoverageEntry {
@@ -215,6 +220,72 @@ export function renderMigrationPlanMarkdown(tasks: MigrationTaskEntry[]): string
     }
     if (task.lastError) {
       lines.push(`- **Last error:** ${task.lastError}`);
+    }
+    lines.push('');
+  });
+
+  return lines.join('\n');
+}
+
+// Same virtual-file pattern again — synthesized from migrationTaskList +
+// ruleCoverageReport + planSanityWarning (all already in state from the
+// Verification Agent's MongoDB write, no backend round trip needed).
+export const VERIFICATION_REPORT_VIRTUAL_PATH = 'Verification_Report.md';
+
+export function renderVerificationReportMarkdown(
+  tasks: MigrationTaskEntry[],
+  ruleCoverage: RuleCoverageEntry[] | null,
+  planSanityWarning: string | null,
+): string {
+  const verifiedCount = tasks.filter(t => t.status === 'verified').length;
+  const failedCount   = tasks.filter(t => t.status === 'failed').length;
+  const otherCount    = tasks.length - verifiedCount - failedCount;
+  const fixedCount    = tasks.filter(t => t.wasAutoFixed).length;
+
+  if (tasks.length === 0) return '# Verification Report\n\nNo migration tasks yet.';
+
+  const lines: string[] = [
+    '# Verification Report',
+    '',
+    `**${verifiedCount} verified**, **${failedCount} failed**, ${otherCount} not yet generated — out of ${tasks.length} total task${tasks.length === 1 ? '' : 's'}.`,
+    '',
+  ];
+
+  if (fixedCount > 0) {
+    lines.push(`⚠ **${fixedCount} file${fixedCount === 1 ? '' : 's'} had a real problem and were auto-repaired** — worth a manual second look, not just trusting the "verified" status.`);
+    lines.push('');
+  }
+
+  if (planSanityWarning) {
+    lines.push(`> ⚠ ${planSanityWarning}`);
+    lines.push('');
+  }
+
+  const coverageByTarget = new Map<string, RuleCoverageEntry>();
+  (ruleCoverage ?? []).forEach(rc => coverageByTarget.set(rc.targetFile, rc));
+
+  tasks.forEach((task, i) => {
+    lines.push(`## ${i + 1}. ${task.legacyFile}`);
+    lines.push(`→ \`${task.targetFile}\``);
+    lines.push('');
+    lines.push(`- **Status:** ${task.status}`);
+    if (task.wasAutoFixed) {
+      lines.push(`- **🔧 Auto-repaired:** the Verification Agent found a real problem in the originally generated code and rewrote this file.`);
+    }
+    if (task.lastError) {
+      lines.push(`- **Last error:** ${task.lastError}`);
+    }
+
+    const rc = coverageByTarget.get(task.targetFile);
+    if (rc) {
+      if (rc.covered && rc.covered.length > 0) {
+        lines.push(`- **Rules covered:**`);
+        rc.covered.forEach(rule => lines.push(`  - ✓ ${rule}`));
+      }
+      if (rc.uncovered && rc.uncovered.length > 0) {
+        lines.push(`- **Rules NOT covered:**`);
+        rc.uncovered.forEach(rule => lines.push(`  - ✗ ${rule}`));
+      }
     }
     lines.push('');
   });

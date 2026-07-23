@@ -432,6 +432,7 @@ const AGENT_PATHS = {
   stage1: 'api/stage1-analysis-agent',
   migrationPlanning: 'api/migration-planning-agent',
   codeGeneration: 'api/code-generation-agent',
+  verification: 'api/verification-agent',
 } as const;
 
 function agentUrl(webhookBaseUrl: string, agent: keyof typeof AGENT_PATHS): string {
@@ -497,6 +498,23 @@ export async function triggerCodeGeneration(
   targetStack: TargetStack
 ): Promise<void> {
   const res = await fetch(agentUrl(webhookBaseUrl, 'codeGeneration'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, targetStack }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+// Verification — reads migrationTaskList + the real legacy AND generated file
+// content back out of MongoDB itself (same pattern as the other agents),
+// compares each generated file against its legacy source file-by-file, and
+// flips each task's status to 'verified' or 'failed' (with lastError set).
+export async function triggerVerification(
+  webhookBaseUrl: string,
+  sessionId: string,
+  targetStack: TargetStack
+): Promise<void> {
+  const res = await fetch(agentUrl(webhookBaseUrl, 'verification'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId, targetStack }),
