@@ -221,15 +221,21 @@ export default function AIPanel({
   }, [provider, model, targetFrontendFramework, targetBackendFramework, targetDb, targetLang, onStart]);
 
   // ── Stage 2 — Start Migration Planning ─────────────────────────────────────
+  // Target Frontend Framework is only required when the project actually has a
+  // frontend layer — a backend-only project (detectedStack.frontend is empty)
+  // has nothing to target a frontend framework for, so it can't ever satisfy
+  // that field and would otherwise permanently block Start Code Migration.
+  const hasFrontendLayer = !!detectedStack?.frontend && detectedStack.frontend.trim().toLowerCase() !== 'none';
+  const requiredTargetFieldCount = hasFrontendLayer ? 4 : 3;
   const allTargetFieldsFilled =
-    targetFrontendFramework.trim().length > 0 &&
+    (!hasFrontendLayer || targetFrontendFramework.trim().length > 0) &&
     targetBackendFramework.trim().length > 0 &&
     targetDb.trim().length > 0 &&
     targetLang.trim().length > 0;
 
   const canStartMigration = allTargetFieldsFilled;
   const migrationDisabledReason = !allTargetFieldsFilled
-    ? 'Fill in all 4 Target Configuration fields first'
+    ? `Fill in all ${requiredTargetFieldCount} Target Configuration fields first`
     : '';
 
   const handleStartMigration = useCallback(() => {
