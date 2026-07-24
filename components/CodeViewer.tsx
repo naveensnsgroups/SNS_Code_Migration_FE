@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import { X, Download } from 'lucide-react';
 import { getFileIcon } from '../utils/labelProvider';
 import MonacoCodeBlock from './MonacoCodeBlock';

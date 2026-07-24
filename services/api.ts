@@ -98,24 +98,6 @@ export async function cloneFromGithub(
   return res.json() as Promise<{ sessionId: string }>;
 }
 
-// Requires the analysis pipeline to have already completed; apiKey/apiKeys must be
-// resent since it wipes them from the session on completion.
-// Requires at least one 'generated' task from /generate.
-export async function startVerification(
-  backendUrl: string,
-  sessionId: string,
-  targetStack: TargetStack,
-  apiKey: string,
-  apiKeys: Record<string, string>
-): Promise<void> {
-  const res = await fetch(`${backendUrl}/api/migrate/verify`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId, targetStack, apiKey, apiKeys }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-}
-
 export async function stopMigration(
   backendUrl: string,
   sessionId: string
@@ -323,80 +305,6 @@ export async function skipToStage2(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-}
-
-// ── Config API — Real Agent + Tool Registry ───────────────────────────────────
-
-export interface AgentVariableDto {
-  name: string;
-  desc: string;
-}
-
-export interface AgentPromptDto {
-  id: string;
-  variant: string;
-  label: string;
-}
-
-export interface AgentModelRequirementDto {
-  purpose: string;
-  identifier: string;
-}
-
-export interface AgentDto {
-  id: string;
-  name: string;
-  description: string;
-  tags: string[];
-  functions: string[];
-  variables: AgentVariableDto[];
-  prompts: AgentPromptDto[];
-  languageModelRequirements: AgentModelRequirementDto[];
-}
-
-export interface AgentsResponse {
-  agents: AgentDto[];
-  total: number;
-  timestamp: string;
-}
-
-export interface ToolDto {
-  id: string;
-  name: string;
-  description: string;
-  parameters: unknown;
-}
-
-export interface ToolsResponse {
-  tools: ToolDto[];
-  total: number;
-  timestamp: string;
-}
-
-export async function fetchAgents(backendUrl: string): Promise<AgentsResponse> {
-  const res = await fetch(`${backendUrl}/api/config/agents`);
-  if (!res.ok) throw new Error('Failed to load agent definitions');
-  return res.json() as Promise<AgentsResponse>;
-}
-
-export async function fetchTools(backendUrl: string): Promise<ToolsResponse> {
-  const res = await fetch(`${backendUrl}/api/config/tools`);
-  if (!res.ok) throw new Error('Failed to load tool registry');
-  return res.json() as Promise<ToolsResponse>;
-}
-
-// Applies retroactively — the backend recomputes cost fresh from this on every /tokens read.
-export async function updateModelPricing(
-  backendUrl: string,
-  sessionId: string,
-  modelPricing: Record<string, { inputPerM: number; outputPerM: number; cacheWritePerM?: number; cacheReadPerM?: number }>
-): Promise<void> {
-  const res = await fetch(`${backendUrl}/api/migrate/pricing`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sessionId, modelPricing }),
   });
   if (!res.ok) throw new Error(await res.text());
 }

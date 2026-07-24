@@ -114,7 +114,12 @@ export default function AIPanel({
   const [targetLang,      setTargetLang]      = useState('');
 
   // ── Derived flags ──────────────────────────────────────────────────────────
-  const isRunning     = ['scanning', 'planning'].includes(status);
+  // Must match useMigration.ts's own isRunning exactly — Stage-1 Analysis
+  // actually cycles through discovery/file-analysis/graph-resolution/
+  // section-writing/assembly, never just 'scanning', so a narrower list here
+  // silently misses the entire Stage-1 run and leaves running-state UI (the
+  // Live pulsing dot, Pause/Stop) dark while real work is happening.
+  const isRunning     = ['scanning', 'planning', 'discovery', 'file-analysis', 'graph-resolution', 'section-writing', 'assembly'].includes(status);
   const isComplete    = status === 'complete';
   // Gates the Stage-2 "Start Code Migration" button in ActionButtons.
   const scanPhaseDone = phases.find(p => p.id === 'scan')?.status === 'done';

@@ -7,7 +7,7 @@
 // Monaco is self-hosted from /public/monaco/vs (copied from the monaco-editor
 // package) so there's no CDN dependency — works offline and under Turbopack.
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Editor, { loader } from '@monaco-editor/react';
 
 // Point the loader at our local copy instead of the default jsDelivr CDN.

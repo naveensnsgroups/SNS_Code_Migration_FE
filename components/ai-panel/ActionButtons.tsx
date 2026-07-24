@@ -47,7 +47,9 @@ export default function ActionButtons({
   isGenerating, codeGenerationDone, generatedCount, failedCount, onStartGeneration,
   isVerifying, verificationDone, verifiedCount, verificationFailedCount, onStartVerification,
 }: Props) {
-  const isRunning  = ['scanning', 'planning'].includes(status);
+  // Must match useMigration.ts's own isRunning exactly — see AIPanel.tsx's
+  // matching comment for why the narrower ['scanning','planning'] list was wrong.
+  const isRunning  = ['scanning', 'planning', 'discovery', 'file-analysis', 'graph-resolution', 'section-writing', 'assembly'].includes(status);
   const isIdle     = status === 'idle';
   const isComplete = status === 'complete';
   const isPaused   = status === 'paused';
