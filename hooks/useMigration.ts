@@ -40,6 +40,7 @@ import {
   stopMigration,
   pauseMigration,
   fetchFileContent,
+  writeLocalOutputFile,
   fetchModernTree,
   fetchSessionTokens,
   fetchSessionState,
@@ -61,6 +62,15 @@ function generateId(): string {
 
 function timestamp(): string {
   return new Date().toLocaleTimeString('en-US', { hour12: false });
+}
+
+function flattenFilePaths(nodes: FileNode[]): string[] {
+  const out: string[] = [];
+  for (const n of nodes) {
+    if (n.type === 'file') out.push(n.path);
+    else if (n.children) out.push(...flattenFilePaths(n.children));
+  }
+  return out;
 }
 
 // Runtime guards for poll payload fields — the backend's response shape can drift,
@@ -264,6 +274,23 @@ export function useMigration(
   const lastLoggedAnalysisReportRef = React.useRef<string | null>(null);
   // Same content-keyed dedupe, for the knowledge graph's local-output write.
   const lastWrittenKnowledgeGraphRef = React.useRef<string | null>(null);
+  // Same content-keyed dedupe, for the Scanner Agent's completion log. Can't be
+  // transition-keyed (status scanning→idle) — the Scanner Agent workflow only
+  // ever updates phases.0.status in MongoDB, never the top-level `status`
+  // field, which is already 'idle' from session creation onward. So that
+  // transition never actually happens again once the session exists.
+  const lastLoggedDetectedStackRef = React.useRef<string | null>(null);
+  // Same content-keyed dedupe, for writing the generated modern code tree to
+  // the Local Output Workspace Path — keyed on the sorted set of file paths
+  // rather than a transition, since code-generation's "done" phase status is
+  // the only completion signal (same reasoning as the other refs above).
+  const lastWrittenModernTreeRef = React.useRef<string | null>(null);
+  // Same content-keyed dedupe, for the Migration Plan / Verification Report
+  // local-output writes below — both stages have the same "no dedicated
+  // done event" problem as detectedStack did, so content-keyed is the only
+  // reliable trigger here too.
+  const lastWrittenMigrationPlanRef = React.useRef<string | null>(null);
+  const lastWrittenVerificationReportRef = React.useRef<string | null>(null);
 
   // ── Live-panel time awareness ────────────────────────────────────────────
   // lastEventAt: timestamp of the most recent successful poll — lets the UI tell
@@ -326,10 +353,51 @@ export function useMigration(
         const parts = clean.split('/');
         setModernFolderBasename(parts[parts.length - 1] || data.modernPath);
       }
+
+      // Content-keyed, not transition-keyed — same pattern as the
+      // analysisReport/knowledgeGraph local-output writes further below.
+      // Code Generation has no dedicated "done" event, so this fires
+      // whenever the generated file set actually changes, mirroring the
+      // fetch-each-file approach since modernFileTree only carries paths,
+      // not content.
+      const localOutputPath = readSettings().localOutputPath.trim();
+      if (localOutputPath && data.fileTree && data.fileTree.length > 0) {
+        const filePaths = flattenFilePaths(data.fileTree).sort();
+        const signature = filePaths.join('|');
+        if (signature && signature !== lastWrittenModernTreeRef.current) {
+          lastWrittenModernTreeRef.current = signature;
+          let successCount = 0;
+          let failCount = 0;
+          for (const filePath of filePaths) {
+            try {
+              const fileData = await fetchFileContent(backendUrl, sid, filePath);
+              const content = fileData.modernContent ?? fileData.content;
+              if (content === null || content === undefined) { failCount++; continue; }
+              // filePath already includes the modernPath prefix (e.g.
+              // "project-modern/app/api/main.py") — strip it so the local
+              // write lands relative to localOutputPath itself, not nested
+              // under a second copy of the project folder name.
+              const relative = data.modernPath && filePath.startsWith(data.modernPath + '/')
+                ? filePath.slice(data.modernPath.length + 1)
+                : filePath;
+              await writeLocalOutputFile(backendUrl, localOutputPath, relative, content);
+              successCount++;
+            } catch {
+              failCount++;
+            }
+          }
+          addLog(
+            failCount > 0
+              ? `Generated code saved locally — ${successCount} file(s) written, ${failCount} failed.`
+              : `Generated code saved locally — ${successCount} file(s) written to ${localOutputPath}.`,
+            failCount > 0 ? 'warning' : 'success'
+          );
+        }
+      }
     } catch {
       setModernFileTree([]);
     }
-  }, [backendUrl]);
+  }, [backendUrl, addLog]);
 
   // Persist sessionId to localStorage so page refresh restores session
   useEffect(() => {
@@ -448,6 +516,28 @@ export function useMigration(
     if (state.activeTool !== undefined) setActiveTool(state.activeTool);
     if (state.toolCallHistory !== undefined) setToolCallHistory(state.toolCallHistory);
 
+    // Content-keyed, not transition-keyed — see lastLoggedDetectedStackRef above.
+    // Runs every tick (and on restore) so the Scanner Agent's async MongoDB
+    // write gets logged whenever it actually lands, regardless of what the
+    // top-level status happens to be doing.
+    if (state.detectedStack) {
+      const stackSignature = JSON.stringify(state.detectedStack);
+      if (stackSignature !== lastLoggedDetectedStackRef.current) {
+        lastLoggedDetectedStackRef.current = stackSignature;
+        const ds = state.detectedStack;
+        const fileCount = ds.fileCount ?? state.fileTree?.length ?? 0;
+        addLog(`Scanner Agent complete — ${fileCount} files scanned.`, 'success');
+        addLog(`Detected: ${ds.language} / ${ds.framework} / ${ds.database}`, 'info');
+        if (ds.reasoning) {
+          addLog(ds.reasoning, 'info');
+        }
+        onNotify?.({
+          type: 'info',
+          message: `Project loaded: ${fileCount} files · ${ds.language} / ${ds.framework}`,
+        });
+      }
+    }
+
     // Content-keyed, not transition-keyed — runs every tick (and on restore)
     // so a report that lands in MongoDB after status already reached
     // 'complete' once before still gets pointed at. The full text lives in
@@ -490,18 +580,51 @@ export function useMigration(
       }
     }
 
+    // Content-keyed, not transition-keyed — Migration Planning has no
+    // dedicated "done" event either. Mirrors the analysisReport pattern above.
+    if (state.migrationTaskList && state.migrationTaskList.length > 0) {
+      const planSignature = JSON.stringify({
+        tasks: state.migrationTaskList,
+        ruleCoverageReport: state.ruleCoverageReport,
+        planSanityWarning: state.planSanityWarning,
+      });
+      if (planSignature !== lastWrittenMigrationPlanRef.current) {
+        lastWrittenMigrationPlanRef.current = planSignature;
+        addLog(`Migration plan ready — open ${MIGRATION_PLAN_VIRTUAL_PATH} in the Explorer to read it.`, 'success');
+
+        const localOutputPath = readSettings().localOutputPath.trim();
+        if (localOutputPath) {
+          const markdown = renderMigrationPlanMarkdown(state.migrationTaskList);
+          writeLocalOutput(backendUrl, localOutputPath, MIGRATION_PLAN_VIRTUAL_PATH, markdown)
+            .then(result => addLog(`Migration plan also saved to ${result.path}`, 'success'))
+            .catch(err => addLog(`Could not save migration plan locally: ${err instanceof Error ? err.message : 'Unknown error'}`, 'warning'));
+        }
+      }
+    }
+
+    // Same content-keyed pattern for the Verification Report.
+    if (state.verificationReport) {
+      const verificationSignature = JSON.stringify(state.verificationReport);
+      if (verificationSignature !== lastWrittenVerificationReportRef.current) {
+        lastWrittenVerificationReportRef.current = verificationSignature;
+        addLog(`Verification report ready — open ${VERIFICATION_REPORT_VIRTUAL_PATH} in the Explorer to read it.`, 'success');
+
+        const localOutputPath = readSettings().localOutputPath.trim();
+        if (localOutputPath) {
+          const markdown = renderVerificationReportMarkdown(
+            state.migrationTaskList ?? [],
+            state.ruleCoverageReport ?? null,
+            state.planSanityWarning ?? null,
+          );
+          writeLocalOutput(backendUrl, localOutputPath, VERIFICATION_REPORT_VIRTUAL_PATH, markdown)
+            .then(result => addLog(`Verification report also saved to ${result.path}`, 'success'))
+            .catch(err => addLog(`Could not save verification report locally: ${err instanceof Error ? err.message : 'Unknown error'}`, 'warning'));
+        }
+      }
+    }
+
     if (!opts.isInitialRestore && transitioned) {
-      if (prevStatus === 'scanning' && nextStatus === 'idle' && state.detectedStack) {
-        // The initial fast "just scan the files" step finished — ready for the
-        // user to click Start Stage-1 Analysis. Not the same as a full run
-        // completing (that lands on 'complete', not 'idle').
-        addLog(`Scanned ${state.detectedStack.fileCount} files`, 'success');
-        addLog(`Detected: ${state.detectedStack.language} / ${state.detectedStack.framework} / ${state.detectedStack.database}`, 'info');
-        onNotify?.({
-          type: 'info',
-          message: `Project loaded: ${state.detectedStack.fileCount} files · ${state.detectedStack.language} / ${state.detectedStack.framework}`,
-        });
-      } else if (nextStatus === 'complete') {
+      if (nextStatus === 'complete') {
         addLog('Stage-1 Analysis complete.', 'success');
       } else if (nextStatus === 'error') {
         setActiveTool(null);

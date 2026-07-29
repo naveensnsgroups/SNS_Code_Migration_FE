@@ -223,6 +223,25 @@ export async function writeLocalOutput(
   return res.json() as Promise<{ ok: boolean; path: string }>;
 }
 
+// Same endpoint as writeLocalOutput above, but for arbitrarily nested
+// generated-code paths (e.g. "app/api/routers/notifications.py") rather than
+// a single flat file — see the backend route for the traversal-safety check
+// this relies on.
+export async function writeLocalOutputFile(
+  backendUrl: string,
+  localOutputPath: string,
+  relativePath: string,
+  content: string
+): Promise<{ ok: boolean; path: string }> {
+  const res = await fetch(`${backendUrl}/api/local-output/write`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ localOutputPath, relativePath, content }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json() as Promise<{ ok: boolean; path: string }>;
+}
+
 // A human-reported issue against the current session, diagnosed (read-only —
 // never auto-fixed) by DIAGNOSTIC_AGENT once submitted via reportIssue().
 export interface ReportedIssue {

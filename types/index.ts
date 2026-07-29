@@ -52,6 +52,9 @@ export interface DetectedStack {
   backend?: string;
   databaseLayer?: string;
   cloudInfrastructure?: string;
+  /** Semantic Validator's explanation of the detected stack — surfaced in the
+   * Terminal alongside the scan-complete log line. */
+  reasoning?: string;
 }
 
 export interface TargetStack {
