@@ -162,6 +162,37 @@ export const MIGRATION_PHASES: MigrationPhase[] = [
   { id: 'migration-assembly', label: 'Migration Report',   status: 'pending' },
 ];
 
+// One correctness problem the Migration Planning Agent's validation pass found
+// in a planned task — e.g. a target path that isn't idiomatic for the target
+// stack, or a conversion that doesn't match the legacy file's actual role.
+export interface PlanValidationIssue {
+  targetFile: string;
+  severity:   'low' | 'medium' | 'high';
+  issue:      string;
+}
+
+// Semantic review of the whole plan (Validate Migration Plan LLM), written by
+// the planning agent alongside migrationTaskList.
+export interface PlanValidation {
+  issues:             PlanValidationIssue[];
+  issueCount:         number;
+  overallAssessment?: string;
+}
+
+// Structural review of the task dependency graph (Validate Task Graph code
+// node). Cycles are already BROKEN by the agent so generation can proceed —
+// they're reported here so the human knows it happened, not as a blocker.
+export interface GraphValidation {
+  cycles:               string[][];
+  orphanedDependencies: { targetFile: string; missingDependency: string }[];
+  duplicateTargets:     string[];
+}
+
+// Human sign-off state for a migration plan. The planning agent writes
+// 'pending'; the separate Migration Plan Approval Agent webhook flips it to
+// 'approved'/'disapproved' when the user clicks in the Operational Panel.
+export type PlanApprovalStatus = 'pending' | 'approved' | 'disapproved';
+
 // Per-file migration task entry — mirrors the backend's MigrationTaskEntry.
 export interface MigrationTaskEntry {
   legacyFile:    string;
@@ -170,6 +201,9 @@ export interface MigrationTaskEntry {
   dependsOn:     string[];
   status:        'pending' | 'generated' | 'verified' | 'failed';
   lastError?:    string;
+  // Correctness problems the planning agent's validation pass flagged for this
+  // specific task — attached per-task so they render inline in the plan list.
+  validationIssues?: PlanValidationIssue[];
   // Other legacyFile paths merged into this same task because the Planner
   // assigned them the same targetFile.
   mergedLegacyFiles?: string[];

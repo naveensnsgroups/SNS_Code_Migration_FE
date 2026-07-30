@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Activity, CheckCircle2, ArrowDown } from 'lucide-react';
-import type { DetectedStack, MigrationStatus, MigrationPhase, TargetStack, AIProvider, MigrationTaskEntry, RuleCoverageEntry, GraphResolutionSummary } from '@/types';
+import type { DetectedStack, MigrationStatus, MigrationPhase, TargetStack, AIProvider, MigrationTaskEntry, RuleCoverageEntry, GraphResolutionSummary, PlanApprovalStatus, PlanValidation, GraphValidation } from '@/types';
 import type { LogEntry } from '@/types';
 import type { ReportedIssue } from '@/services/api';
 
@@ -18,6 +18,7 @@ import PipelineProgress   from '@/components/ai-panel/PipelineProgress';
 import ActionButtons      from '@/components/ai-panel/ActionButtons';
 import MigrationTaskList  from '@/components/ai-panel/MigrationTaskList';
 import GraphReviewCheckpoint from '@/components/ai-panel/GraphReviewCheckpoint';
+import PlanApprovalCheckpoint from '@/components/ai-panel/PlanApprovalCheckpoint';
 import LiveStatusOverlay  from '@/components/live-status/LiveStatusOverlay';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -64,6 +65,13 @@ interface Props {
   onReportIssue?: (stage: string, text: string) => Promise<void>;
   isPlanning?:         boolean;
   onStartMigration?:   (target: TargetStack) => void;
+  // Stage 2 — human sign-off gate between planning and code generation
+  approvalStatus?:  PlanApprovalStatus | null;
+  approvalNote?:    string | null;
+  planValidation?:  PlanValidation | null;
+  graphValidation?: GraphValidation | null;
+  isApproving?:     boolean;
+  onApprovePlan?:   (decision: 'approved' | 'disapproved', note?: string) => Promise<void>;
   // Stage 2 — Code Generation
   isGenerating?:       boolean;
   onStartGeneration?:  (target: TargetStack) => void;
@@ -97,6 +105,7 @@ export default function AIPanel({
   settingsTrigger = 0, onSettingsSaved, width,
   migrationTaskList, ruleCoverageReport, planSanityWarning, reportedIssues, onReportIssue,
   isPlanning, onStartMigration,
+  approvalStatus, approvalNote, planValidation, graphValidation, isApproving, onApprovePlan,
   isGenerating, onStartGeneration,
   isVerifying, onStartVerification,
 }: Props) {
@@ -180,7 +189,7 @@ export default function AIPanel({
   // HITL checkpoint banner — the same shared detector the Live Activity panel uses,
   // so both frame every pause (Stage 1 done, plan ready, code generated) identically.
   // Returns null mid-run and when the migration is genuinely complete.
-  const checkpoint = detectCheckpoint(status, phases);
+  const checkpoint = detectCheckpoint(status, phases, approvalStatus);
 
   // ── Live Status Overlay toggle (manual only) ───────────────────────────
   const [liveOpen, setLiveOpen] = useState(false);
@@ -280,6 +289,28 @@ export default function AIPanel({
     setTargetConfigUnlocked(false);
   }, [save]);
 
+  // ── Stage 2 — plan approval gate ───────────────────────────────────────────
+  // The checkpoint card shows only once a plan actually exists, isn't being
+  // replaced by a fresh planning run, AND the approval state is actually known.
+  //
+  // That last condition matters: a missing approvalStatus means the gate does
+  // not apply to this session (see planApproved below, which lets code
+  // generation proceed). Rendering the card anyway made it claim "Action
+  // Needed" while the Generate Code button sat enabled right above it —
+  // two parts of the same panel disagreeing about whether approval was required.
+  const hasPlan = !!migrationTaskList && migrationTaskList.length > 0;
+  const showApprovalCheckpoint = hasPlan && !isPlanning && !!onApprovePlan && !!approvalStatus;
+
+  // Sessions planned before this gate existed have no approvalStatus at all —
+  // treating that as "not approved" would permanently lock code generation for
+  // them with no way to unblock, so only an explicit 'pending'/'disapproved'
+  // blocks. Undefined/null means the gate doesn't apply.
+  const planApproved = !approvalStatus || approvalStatus === 'approved';
+  const generationDisabledReason =
+    approvalStatus === 'pending'     ? 'Approve the migration plan below first' :
+    approvalStatus === 'disapproved' ? 'This plan was sent back — re-plan the migration first' :
+    '';
+
   // ── Stage 2 — Start Code Generation ────────────────────────────────────────
   const generatedCount = (migrationTaskList ?? []).filter(t => t.status === 'generated' || t.status === 'verified').length;
   const failedCount    = (migrationTaskList ?? []).filter(t => t.status === 'failed').length;
@@ -356,6 +387,7 @@ export default function AIPanel({
             phaseDurations={phaseDurations}
             onReconnect={onReconnect}
             stageWarnings={stageWarnings}
+            approvalStatus={approvalStatus}
           />
         ) : (
           <>
@@ -435,6 +467,7 @@ export default function AIPanel({
               isTriggeringScannerAgent={isTriggeringScannerAgent}
               onTriggerScannerAgent={onTriggerScannerAgent}
               planPhaseDone={scanPhaseDone}
+              phases={phases}
               onStart={handleStart}
               onStop={onStop}
               onPause={onPause}
@@ -447,6 +480,8 @@ export default function AIPanel({
               codeGenerationDone={codeGenerationDone}
               generatedCount={generatedCount}
               failedCount={failedCount}
+              planApproved={planApproved}
+              generationDisabledReason={generationDisabledReason}
               onStartGeneration={onStartGeneration ? handleStartGeneration : undefined}
               isVerifying={isVerifying}
               verificationDone={verificationDone}
@@ -454,6 +489,22 @@ export default function AIPanel({
               verificationFailedCount={failedCount}
               onStartVerification={onStartVerification ? handleStartVerification : undefined}
             />
+
+            {/* Stage 2 — plan approval gate. Sits directly above the plan list
+                it refers to, and above the disabled "Generate Code" button's
+                "approve the plan below first" hint points down to it. */}
+            {showApprovalCheckpoint && (
+              <PlanApprovalCheckpoint
+                taskCount={migrationTaskList?.length ?? 0}
+                approvalStatus={approvalStatus ?? null}
+                approvalNote={approvalNote ?? null}
+                planValidation={planValidation ?? null}
+                graphValidation={graphValidation ?? null}
+                isBusy={!!isApproving}
+                onApprove={() => { void onApprovePlan?.('approved'); }}
+                onDisapprove={note => { void onApprovePlan?.('disapproved', note); }}
+              />
+            )}
 
             {/* Stage 2 — Migration Plan review (the human checkpoint) */}
             {migrationTaskList && migrationTaskList.length > 0 && (

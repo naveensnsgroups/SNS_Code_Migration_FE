@@ -161,6 +161,20 @@ export default function MigrationTaskList({
                   {task.lastError}
                 </div>
               )}
+              {/* Correctness problems the planning agent's validation pass flagged
+                  for this file — shown inline so a reviewer sees them against the
+                  actual mapping, not only aggregated in the approval card above. */}
+              {task.validationIssues?.map((issue, i) => (
+                <div
+                  key={i}
+                  style={{
+                    color: issue.severity === 'high' ? 'var(--text-error, #e05252)' : 'var(--text-warning)',
+                    fontSize: '10px', marginTop: '2px', marginLeft: '16px',
+                  }}
+                >
+                  {issue.severity === 'high' ? '⚠ ' : ''}{issue.issue}
+                </div>
+              ))}
               {uncovered.length > 0 && (
                 <div style={{ color: 'var(--text-error, #e05252)', fontSize: '10px', marginTop: '2px', marginLeft: '16px' }}>
                   Unenforced: {uncovered.join('; ')}

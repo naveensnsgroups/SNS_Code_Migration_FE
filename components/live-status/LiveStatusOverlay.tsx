@@ -5,7 +5,7 @@
 
 import { memo } from 'react';
 import { Loader2, AlertTriangle, AlertCircle, X, Activity, Check, UserCheck, WifiOff, RefreshCw, Clock } from 'lucide-react';
-import type { MigrationStatus, MigrationPhase } from '@/types';
+import type { MigrationStatus, MigrationPhase, PlanApprovalStatus } from '@/types';
 import type { LiveStatusData } from './types';
 import { useNow, formatDuration } from '@/hooks/useNow';
 import { detectCheckpoint } from '@/utils/checkpoint';
@@ -177,11 +177,15 @@ interface Props {
   onReconnect?: () => void;
   /** Real caveats for a stage that finished but produced something hollow/incomplete. */
   stageWarnings?: Record<string, string>;
+  /** Plan sign-off state — distinguishes "plan ready, go generate" from
+   *  "plan ready, but nobody has approved it yet". See detectCheckpoint. */
+  approvalStatus?: PlanApprovalStatus | null;
 }
 
 export default function LiveStatusOverlay({
   data, status, phases, isRunning, onClose,
   lastEventAt = null, runStartedAt = null, phaseDurations = {}, onReconnect, stageWarnings = {},
+  approvalStatus = null,
 }: Props) {
   const {
     realPct, fileCount, currentFile,
@@ -212,7 +216,31 @@ export default function LiveStatusOverlay({
   // next pending phase, returning the right "awaiting your action" label/hint, or
   // null when the run is genuinely finished. Shared with the Operational Panel's
   // banner so both frame the same pause identically.
-  const checkpoint = detectCheckpoint(status, phases);
+  const checkpoint = detectCheckpoint(status, phases, approvalStatus);
+
+  // The plan-approval gate is a real pause in the pipeline, but it isn't a
+  // backend phase — no agent runs during it, so nothing reports it. Injected here
+  // as a derived step so the stepper doesn't jump straight from "Migration
+  // Planning ✓" to "Code Generation ○" while actually waiting on a human click.
+  // Only shown once approvalStatus exists at all: sessions predating the gate
+  // must not sprout a step that never applied to them.
+  const displayPhases: MigrationPhase[] = (() => {
+    if (!approvalStatus) return phases;
+    const planningIdx = phases.findIndex(p => p.id === 'migration-planning');
+    if (planningIdx === -1) return phases;
+    const approvalStep: MigrationPhase = {
+      id: '__plan-approval__',
+      label: 'Plan Approval',
+      status: approvalStatus === 'approved' ? 'done'
+            : approvalStatus === 'disapproved' ? 'error'
+            : 'active',
+    };
+    return [
+      ...phases.slice(0, planningIdx + 1),
+      approvalStep,
+      ...phases.slice(planningIdx + 1),
+    ];
+  })();
 
   const dotClass   = DOT_CLASS[effectiveStatus]   ?? DOT_CLASS.idle;
   const badgeClass = checkpoint ? 'ls-overlay__badge--review' : (BADGE_CLASS[effectiveStatus] ?? BADGE_CLASS.idle);
@@ -327,11 +355,11 @@ export default function LiveStatusOverlay({
       <Divider />
 
       {/* ── Pipeline Stepper ────────────────────────────────────────────── */}
-      {phases.length > 0 && (
+      {displayPhases.length > 0 && (
         <>
           <div className="ls-overlay__section">
             <SectionTitle>Pipeline</SectionTitle>
-            <StageStepper phases={phases} phaseDurations={phaseDurations} stageWarnings={stageWarnings} />
+            <StageStepper phases={displayPhases} phaseDurations={phaseDurations} stageWarnings={stageWarnings} />
           </div>
           <Divider />
         </>

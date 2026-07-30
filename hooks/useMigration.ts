@@ -20,6 +20,9 @@ import {
   MigrationTaskEntry,
   RuleCoverageEntry,
   GraphResolutionSummary,
+  PlanApprovalStatus,
+  PlanValidation,
+  GraphValidation,
   STAGE1_ANALYSIS_VIRTUAL_PATH,
   KNOWLEDGE_GRAPH_FOLDER,
   KNOWLEDGE_GRAPH_CATEGORIES,
@@ -185,6 +188,13 @@ export interface UseMigrationReturn {
   planSanityWarning: string | null;
   reportedIssues: ReportedIssue[];
   handleReportIssue: (stage: string, text: string) => Promise<void>;
+  // Human sign-off gate between planning and code generation.
+  approvalStatus: PlanApprovalStatus | null;
+  approvalNote: string | null;
+  planValidation: PlanValidation | null;
+  graphValidation: GraphValidation | null;
+  isApproving: boolean;
+  handleApprovePlan: (decision: 'approved' | 'disapproved', note?: string) => Promise<void>;
   isPlanning: boolean;
   isGenerating: boolean;
   isVerifying: boolean;
@@ -487,8 +497,11 @@ export function useMigration(
     setCurrentFile(state.currentFile);
     setFileTree(state.fileTree || []);
     setDetectedStack(state.detectedStack ?? null);
-    codeMigrationRef.current?.setMigrationTaskList(state.migrationTaskList ?? null);
-    codeMigrationRef.current?.setRuleCoverageReport(state.ruleCoverageReport ?? null);
+    // One call, not per-field setters: this maps every field useCodeMigration
+    // owns (task list, rule coverage, approval state, plan validation, reported
+    // issues). Picking off individual setters here is what previously left
+    // approvalStatus permanently null during polling, hiding the approval gate.
+    codeMigrationRef.current?.applySessionState(state);
     setGraphResolutionSummary(state.graphResolutionSummary ?? null);
     setAnalysisReport(state.analysisReport ?? null);
     setKnowledgeGraph(state.knowledgeGraph ?? null);
@@ -1157,6 +1170,12 @@ export function useMigration(
     planSanityWarning: codeMigration.planSanityWarning,
     reportedIssues: codeMigration.reportedIssues,
     handleReportIssue: codeMigration.handleReportIssue,
+    approvalStatus: codeMigration.approvalStatus,
+    approvalNote: codeMigration.approvalNote,
+    planValidation: codeMigration.planValidation,
+    graphValidation: codeMigration.graphValidation,
+    isApproving: codeMigration.isApproving,
+    handleApprovePlan: codeMigration.handleApprovePlan,
     isPlanning, isGenerating, isVerifying,
     graphResolutionSummary, isCheckpointBusy,
     lastEventAt, runStartedAt, phaseDurations, reconnect,

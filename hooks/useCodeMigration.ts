@@ -4,12 +4,13 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import type { MigrationTaskEntry, RuleCoverageEntry, TargetStack, LogLevel, MigrationStatus } from '@/types';
-import type { ReportedIssue } from '@/services/api';
+import type { MigrationTaskEntry, RuleCoverageEntry, TargetStack, LogLevel, MigrationStatus, PlanApprovalStatus, PlanValidation, GraphValidation } from '@/types';
+import type { ReportedIssue, SessionStateResponse } from '@/services/api';
 import {
   triggerMigrationPlanning,
   triggerCodeGeneration,
   triggerVerification,
+  approveMigrationPlan,
   fetchSessionState,
   reportIssue,
 } from '@/services/api';
@@ -22,10 +23,21 @@ export interface UseCodeMigrationReturn {
   ruleCoverageReport: RuleCoverageEntry[] | null;
   planSanityWarning: string | null;
   reportedIssues: ReportedIssue[];
+  // Human sign-off gate between planning and code generation.
+  approvalStatus: PlanApprovalStatus | null;
+  approvalNote: string | null;
+  planValidation: PlanValidation | null;
+  graphValidation: GraphValidation | null;
+  isApproving: boolean;
   setMigrationTaskList:  (v: MigrationTaskEntry[] | null) => void;
   setRuleCoverageReport: (v: RuleCoverageEntry[] | null) => void;
+  /** Maps an already-fetched session response onto every field this hook owns.
+   *  The polling loop must call this rather than picking off individual setters —
+   *  see the comment on the implementation. */
+  applySessionState: (state: SessionStateResponse) => void;
   refreshFromSession: (sessionId: string) => Promise<void>;
   handleStartMigrationPlanning: (target: TargetStack) => Promise<void>;
+  handleApprovePlan: (decision: 'approved' | 'disapproved', note?: string) => Promise<void>;
   handleStartCodeGeneration:    (target: TargetStack) => Promise<void>;
   handleStartVerification:      (target: TargetStack) => Promise<void>;
   handleReportIssue: (stage: string, text: string) => Promise<void>;
@@ -42,18 +54,42 @@ export function useCodeMigration(
   const [ruleCoverageReport, setRuleCoverageReport] = useState<RuleCoverageEntry[] | null>(null);
   const [planSanityWarning, setPlanSanityWarning]   = useState<string | null>(null);
   const [reportedIssues, setReportedIssues]         = useState<ReportedIssue[]>([]);
+  const [approvalStatus, setApprovalStatus]         = useState<PlanApprovalStatus | null>(null);
+  const [approvalNote, setApprovalNote]             = useState<string | null>(null);
+  const [planValidation, setPlanValidation]         = useState<PlanValidation | null>(null);
+  const [graphValidation, setGraphValidation]       = useState<GraphValidation | null>(null);
+  const [isApproving, setIsApproving]               = useState(false);
+
+  // Single mapping from a session response onto this hook's state.
+  //
+  // This exists because the polling loop in useMigration.ts used to reach in and
+  // call setMigrationTaskList/setRuleCoverageReport directly, which meant every
+  // OTHER field here (approvalStatus, planValidation, planSanityWarning,
+  // reportedIssues) was only ever populated by refreshFromSession — and that
+  // runs solely after an approve/report click, never on page load or during
+  // polling. The visible symptom was a plan whose task list rendered fine while
+  // its approval gate stayed invisible, because approvalStatus was still null.
+  // Keeping the mapping in one place is what stops that from silently recurring
+  // the next time a field is added.
+  const applySessionState = useCallback((state: SessionStateResponse) => {
+    setMigrationTaskList(state.migrationTaskList ?? null);
+    setRuleCoverageReport(state.ruleCoverageReport ?? null);
+    setPlanSanityWarning(state.planSanityWarning ?? null);
+    setReportedIssues(state.reportedIssues ?? []);
+    setApprovalStatus(state.approvalStatus ?? null);
+    setApprovalNote(state.approvalNote ?? null);
+    setPlanValidation(state.planValidation ?? null);
+    setGraphValidation(state.graphValidation ?? null);
+  }, []);
 
   const refreshFromSession = useCallback(async (sid: string) => {
     try {
       const state = await fetchSessionState(backendUrl, sid);
-      setMigrationTaskList(state.migrationTaskList ?? null);
-      setRuleCoverageReport(state.ruleCoverageReport ?? null);
-      setPlanSanityWarning(state.planSanityWarning ?? null);
-      setReportedIssues(state.reportedIssues ?? []);
+      applySessionState(state);
     } catch {
       // non-critical — user can refresh
     }
-  }, [backendUrl]);
+  }, [backendUrl, applySessionState]);
 
   // The diagnostic agent investigation runs async on the backend (real tool
   // calls take real time) — poll a few times after submitting so the human
@@ -96,6 +132,13 @@ export function useCodeMigration(
     setMigrationTaskList(null);
     setRuleCoverageReport(null);
     setPlanSanityWarning(null);
+    // Re-planning produces a genuinely new plan — any earlier sign-off applied
+    // to the OLD one, so it must not carry over and let code generation run
+    // against a plan nobody actually approved.
+    setApprovalStatus(null);
+    setApprovalNote(null);
+    setPlanValidation(null);
+    setGraphValidation(null);
     setStatus('migration-planning');
     addLog('Starting migration planning...', 'command');
 
@@ -108,6 +151,45 @@ export function useCodeMigration(
       setStatus('error');
     }
   }, [sessionId, addLog, startPolling, setStatus]);
+
+  // Records the human's sign-off via the separate Migration Plan Approval
+  // Agent webhook (see approveMigrationPlan in api.ts for why it's its own
+  // workflow rather than a blocking node inside the planning agent).
+  //
+  // Sets approvalStatus locally right away so the panel responds immediately,
+  // then re-reads the session so what's rendered is the value that actually
+  // landed in MongoDB — not just our optimistic guess. Unlike the other
+  // handlers here this does NOT touch setStatus/startPolling: recording a
+  // decision isn't a pipeline stage, and claiming one would leave the panel
+  // showing a running stage that no agent is actually working on.
+  const handleApprovePlan = useCallback(async (decision: 'approved' | 'disapproved', note?: string) => {
+    if (!sessionId || isApproving) return;
+
+    const settings = readSettings();
+    if (!settings.agentBuilderWebhookUrl.trim()) {
+      addLog('AgentBuilder Webhook Base URL is not configured — set it in Settings first.', 'error');
+      return;
+    }
+
+    setIsApproving(true);
+    try {
+      await approveMigrationPlan(settings.agentBuilderWebhookUrl, sessionId, decision, note);
+      setApprovalStatus(decision);
+      setApprovalNote(note ?? null);
+      addLog(
+        decision === 'approved'
+          ? 'Migration plan approved — code generation unlocked.'
+          : 'Migration plan sent back for revision.',
+        'success',
+      );
+      await refreshFromSession(sessionId);
+    } catch (err: unknown) {
+      addLog(`Failed to record plan decision: ${err instanceof Error ? err.message : 'Unknown error'}`, 'error');
+      throw err;
+    } finally {
+      setIsApproving(false);
+    }
+  }, [sessionId, isApproving, addLog, refreshFromSession]);
 
   // Fires the Code Generation Agent webhook (same pattern as the other
   // agents — reads migrationTaskList + knowledge graph + source files back
@@ -163,9 +245,12 @@ export function useCodeMigration(
 
   return {
     migrationTaskList, ruleCoverageReport, planSanityWarning, reportedIssues,
+    approvalStatus, approvalNote, planValidation, graphValidation, isApproving,
     setMigrationTaskList, setRuleCoverageReport,
+    applySessionState,
     refreshFromSession,
-    handleStartMigrationPlanning, handleStartCodeGeneration, handleStartVerification,
+    handleStartMigrationPlanning, handleApprovePlan,
+    handleStartCodeGeneration, handleStartVerification,
     handleReportIssue,
   };
 }

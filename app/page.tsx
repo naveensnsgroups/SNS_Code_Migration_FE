@@ -75,6 +75,7 @@ export default function HomePage() {
     tokenUsage, analysisReport, knowledgeGraph, isRunning, hasProject,
     activeTool, toolCallHistory,
     migrationTaskList, ruleCoverageReport, planSanityWarning, reportedIssues, handleReportIssue,
+    approvalStatus, approvalNote, planValidation, graphValidation, isApproving, handleApprovePlan,
     isPlanning, isGenerating, isVerifying,
     graphResolutionSummary, isCheckpointBusy,
     lastEventAt, runStartedAt, phaseDurations, reconnect,
@@ -474,6 +475,12 @@ export default function HomePage() {
               onReportIssue={handleReportIssue}
               isPlanning={isPlanning}
               onStartMigration={handleStartMigrationPlanning}
+              approvalStatus={approvalStatus}
+              approvalNote={approvalNote}
+              planValidation={planValidation}
+              graphValidation={graphValidation}
+              isApproving={isApproving}
+              onApprovePlan={handleApprovePlan}
               isGenerating={isGenerating}
               onStartGeneration={handleStartCodeGeneration}
               isVerifying={isVerifying}

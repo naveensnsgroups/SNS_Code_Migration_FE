@@ -1,6 +1,6 @@
 // Central API communication layer — pure typed fetch wrappers, no business logic, no hardcoded URLs.
 
-import type { DetectedStack, FileNode, TargetStack, MigrationTaskEntry, RuleCoverageEntry, GraphResolutionSummary, LogEntry } from '@/types';
+import type { DetectedStack, FileNode, TargetStack, MigrationTaskEntry, RuleCoverageEntry, GraphResolutionSummary, LogEntry, PlanApprovalStatus, PlanValidation, GraphValidation } from '@/types';
 import type { ToolCallHistoryItem } from '@/components/live-status/types';
 
 // ── Response Types ────────────────────────────────────────────────────────────
@@ -160,6 +160,16 @@ export interface SessionStateResponse {
   fullProjectCheckResult: FullProjectCheckResult | null;
   planSanityWarning: string | null;
   reportedIssues: ReportedIssue[];
+  /** Human sign-off state for the migration plan. Written 'pending' by the
+   *  Migration Planning Agent, flipped by approveMigrationPlan() above.
+   *  Optional — sessions planned before this gate existed won't have it. */
+  approvalStatus?: PlanApprovalStatus | null;
+  /** Free-text reason captured when the user disapproves. */
+  approvalNote?: string | null;
+  /** Semantic correctness review of the plan (Validate Migration Plan LLM). */
+  planValidation?: PlanValidation | null;
+  /** Structural review of the task dependency graph (Validate Task Graph). */
+  graphValidation?: GraphValidation | null;
   // ── Polling-only fields (SSE replacement) ──────────────────────────────────
   // Optional: the old push-based transport (EventSource) got these from
   // dedicated event types. Polling reads them straight off this same
@@ -358,6 +368,7 @@ const AGENT_PATHS = {
   scanner: 'api/scanner-agent',
   stage1: 'api/stage1-analysis-agent',
   migrationPlanning: 'api/migration-planning-agent',
+  migrationPlanApproval: 'api/migration-planning-agent/approve',
   codeGeneration: 'api/code-generation-agent',
   verification: 'api/verification-agent',
 } as const;
@@ -411,6 +422,27 @@ export async function triggerMigrationPlanning(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ sessionId, targetStack }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+}
+
+// Migration Plan Approval — records the human's sign-off on the plan the
+// Migration Planning Agent produced. Deliberately a SEPARATE small workflow
+// rather than a blocking wait-node inside the planning agent itself: a paused
+// in-workflow node can only be resumed from the platform's own chat UI, which
+// this frontend can't drive. The planning agent writes approvalStatus
+// 'pending' and finishes; this flips it, and Code Generation is gated on the
+// result.
+export async function approveMigrationPlan(
+  webhookBaseUrl: string,
+  sessionId: string,
+  decision: 'approved' | 'disapproved',
+  note?: string
+): Promise<void> {
+  const res = await fetch(agentUrl(webhookBaseUrl, 'migrationPlanApproval'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId, decision, note: note ?? null }),
   });
   if (!res.ok) throw new Error(await res.text());
 }
