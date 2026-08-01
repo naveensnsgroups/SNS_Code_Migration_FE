@@ -199,7 +199,12 @@ export interface MigrationTaskEntry {
   targetFile:    string;
   rulesInvolved: string[];
   dependsOn:     string[];
-  status:        'pending' | 'generated' | 'verified' | 'failed';
+  // 'generated-unverified' means real code was produced but the generation
+  // agent's own output check found something suspicious in it (empty body,
+  // unbalanced brackets suggesting truncation, leftover TODO/placeholder
+  // markers). Deliberately distinct from 'generated' so a file that needs a
+  // human look isn't presented as finished.
+  status:        'pending' | 'generated' | 'generated-unverified' | 'verified' | 'failed';
   lastError?:    string;
   // Correctness problems the planning agent's validation pass flagged for this
   // specific task — attached per-task so they render inline in the plan list.
@@ -214,6 +219,13 @@ export interface MigrationTaskEntry {
   // first pass" from "had to be auto-repaired," which is worth surfacing
   // separately since a repaired file deserves a second look, not blind trust.
   wasAutoFixed?: boolean;
+  // Set by the code-generation agent's Master Review pass, which sees every
+  // file in a chunk together and so can catch cross-file defects the parallel
+  // generation slots structurally cannot. Same reasoning as wasAutoFixed: a
+  // repaired file is worth flagging rather than silently shipping.
+  masterFixed?: boolean;
+  masterDefect?: string;
+  masterDefectCategory?: string;
 }
 
 export interface RuleCoverageEntry {

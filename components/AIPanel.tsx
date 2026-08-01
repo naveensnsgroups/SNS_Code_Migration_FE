@@ -312,7 +312,14 @@ export default function AIPanel({
     '';
 
   // ── Stage 2 — Start Code Generation ────────────────────────────────────────
-  const generatedCount = (migrationTaskList ?? []).filter(t => t.status === 'generated' || t.status === 'verified').length;
+  // 'generated-unverified' counts as generated: the file really was produced and
+  // written to disk, it just carries a caveat. Excluding it would under-report
+  // progress and — because Verify Code is gated on generatedCount > 0 — could
+  // leave a chunk of real files with no route to verification.
+  const generatedCount = (migrationTaskList ?? []).filter(t =>
+    t.status === 'generated' || t.status === 'generated-unverified' || t.status === 'verified'
+  ).length;
+  const needsReviewCount = (migrationTaskList ?? []).filter(t => t.status === 'generated-unverified').length;
   const failedCount    = (migrationTaskList ?? []).filter(t => t.status === 'failed').length;
   const codeGenerationDone =
     !!migrationTaskList && migrationTaskList.length > 0 &&
@@ -480,6 +487,7 @@ export default function AIPanel({
               codeGenerationDone={codeGenerationDone}
               generatedCount={generatedCount}
               failedCount={failedCount}
+              needsReviewCount={needsReviewCount}
               planApproved={planApproved}
               generationDisabledReason={generationDisabledReason}
               onStartGeneration={onStartGeneration ? handleStartGeneration : undefined}

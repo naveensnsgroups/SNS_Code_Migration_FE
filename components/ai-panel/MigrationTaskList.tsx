@@ -27,9 +27,18 @@ interface Props {
 const STATUS_ICON: Record<MigrationTaskEntry['status'], { icon: typeof Circle; color: string }> = {
   pending:   { icon: Circle,       color: 'var(--text-muted)' },
   generated: { icon: Circle,       color: 'var(--text-info)' },
+  // Code was produced but the agent's own output check flagged it (truncation,
+  // placeholder markers, empty body) — warning styling, not a success tick.
+  'generated-unverified': { icon: AlertTriangle, color: 'var(--text-warning)' },
   verified:  { icon: CheckCircle2, color: 'var(--text-success)' },
   failed:    { icon: XCircle,      color: 'var(--text-error, #e05252)' },
 };
+
+// A status this map doesn't know about must not take the whole panel down with
+// it. The agents write these values directly to MongoDB, so the set can grow
+// without this file changing — an unrecognised value renders neutrally and the
+// plan stays readable.
+const FALLBACK_STATUS_ICON = { icon: Circle, color: 'var(--text-muted)' };
 
 // Must match INFRASTRUCTURE_TASK_PREFIX in the backend's stage2/runners/shared.ts —
 // marks a synthetic task with no real legacy source (e.g. the shared DB connection module).
@@ -100,7 +109,7 @@ export default function MigrationTaskList({
 
       <div style={{ maxHeight: '260px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
         {tasks.map(task => {
-          const { icon: StatusIcon, color } = STATUS_ICON[task.status];
+          const { icon: StatusIcon, color } = STATUS_ICON[task.status] ?? FALLBACK_STATUS_ICON;
           const coverage  = coverageByFile.get(task.legacyFile);
           const covered   = coverage?.covered ?? [];
           const uncovered = coverage?.uncovered ?? [];
@@ -137,6 +146,25 @@ export default function MigrationTaskList({
                     <span>FIXED</span>
                   </div>
                 )}
+                {task.masterFixed && (
+                  // Distinct from FIXED above: that's the Verification Agent
+                  // after the fact, this is the Master Review inside code
+                  // generation, before the file was ever written.
+                  <div
+                    title={task.masterDefect
+                      ? `Master Review repaired this file before it was written — ${task.masterDefectCategory ? task.masterDefectCategory + ': ' : ''}${task.masterDefect}`
+                      : 'Master Review repaired this file before it was written.'}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '3px', flexShrink: 0,
+                      fontSize: '9.5px', fontWeight: 700, color: 'var(--text-info)',
+                      background: 'var(--bg-tertiary)', border: '1px solid var(--text-info)',
+                      borderRadius: '10px', padding: '1px 6px', marginLeft: '4px',
+                    }}
+                  >
+                    <ShieldCheck size={9} />
+                    <span>REVIEWED</span>
+                  </div>
+                )}
               </div>
               {task.mergedLegacyFiles && task.mergedLegacyFiles.length > 0 && (
                 <div style={{ color: 'var(--text-muted)', fontSize: '10px', marginLeft: '16px' }}>
@@ -159,6 +187,13 @@ export default function MigrationTaskList({
               {task.status === 'failed' && task.lastError && (
                 <div style={{ color: 'var(--text-error, #e05252)', fontSize: '10px', marginTop: '3px', marginLeft: '16px' }}>
                   {task.lastError}
+                </div>
+              )}
+              {/* Why a file is flagged for review — otherwise the warning icon
+                  says something is wrong without saying what. */}
+              {task.status === 'generated-unverified' && task.lastError && (
+                <div style={{ color: 'var(--text-warning)', fontSize: '10px', marginTop: '3px', marginLeft: '16px' }}>
+                  Needs review: {task.lastError}
                 </div>
               )}
               {/* Correctness problems the planning agent's validation pass flagged

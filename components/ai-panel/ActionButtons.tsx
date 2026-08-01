@@ -35,6 +35,9 @@ interface Props {
   codeGenerationDone?:   boolean;
   generatedCount?:       number;
   failedCount?:          number;
+  /** Files written but flagged by the generator's own output check — counted in
+   * generatedCount, surfaced separately so "complete" isn't overstated. */
+  needsReviewCount?:     number;
   planApproved?:         boolean;
   generationDisabledReason?: string;
   onStartGeneration?:    () => void;
@@ -69,7 +72,7 @@ export default function ActionButtons({
   isTriggeringScannerAgent, onTriggerScannerAgent,
   canStartMigration, migrationDisabledReason, isPlanning, migrationPlanningDone,
   onStartMigration,
-  isGenerating, codeGenerationDone, generatedCount, failedCount,
+  isGenerating, codeGenerationDone, generatedCount, failedCount, needsReviewCount,
   planApproved, generationDisabledReason, onStartGeneration,
   isVerifying, verificationDone, verifiedCount, verificationFailedCount, onStartVerification,
 }: Props) {
@@ -197,6 +200,7 @@ export default function ActionButtons({
     ) : codeGenerationDone && !isGenerating ? (
       <span>
         Code generation complete — {generatedCount ?? 0} generated
+        {needsReviewCount ? `, ${needsReviewCount} need review` : ''}
         {failedCount ? `, ${failedCount} failed` : ''}.
       </span>
     ) : migrationPlanningDone && !isPlanning ? (
